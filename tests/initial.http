@@ -1,0 +1,44 @@
+@base=http://localhost:8181
+@tenant={{$dotenv TENANT}}
+@appid={{$dotenv CLIENT_ID}}
+@secret={{$dotenv CLIENT_SECRET}}
+
+###
+# Login
+# @name login
+POST https://login.microsoftonline.com/{{tenant}}/oauth2/v2.0/token
+Host: login.microsoftonline.com
+Content-Type: application/x-www-form-urlencoded
+
+client_id={{appid}}&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default&client_secret={{secret}}&grant_type=client_credentials
+
+###
+# Azure Info
+GET https://graph.microsoft.com/v1.0/servicePrincipals(appId='{{appid}}')
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+###
+# Azure Info
+GET https://graph.microsoft.com/v1.0/servicePrincipals(appId='{{appid}}')
+  ?$select=id,displayName,appId,appOwnerOrganizationId,servicePrincipalType
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+###
+GET {{base}}/user/someone
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+###
+GET {{base}}/test1/test2
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+###
+GET {{base}}/xyzzy/1234
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+
+###
+GET {{base}}/public/asdasd
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+###
+GET {{base}}/test/public/asdasd

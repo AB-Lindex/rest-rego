@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: demo
+  template:
+    metadata:
+      labels:
+        k8s-app: demo
+    spec:
+      containers:
+        - name: main
+          image: ninlil/http-https-echo
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 10000
+            initialDelaySeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 10000
+
+        - name: sidecar
+          image: lindex/rest-rego
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: BACKEND_PORT
+              value: '10000'
+            - name: AZURE_TENANT
+              value: '10101010-2020-3030-4040-505050505050'
+          ports:
+            - containerPort: 8181
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8182
+            initialDelaySeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8182
+          volumeMounts:
+            - name: policies
+              mountPath: /policies
+
+      serviceAccount: demo
+      serviceAccountName: demo
+
+      volumes:
+        - name: policies
+          configMap:
+            name: policies

@@ -1,0 +1,16 @@
+@base=http://localhost:8182
+
+###
+GET {{base}}/readyz
+
+###
+GET {{base}}/healthz
+
+###
+GET {{base}}/version
+
+###
+GET {{base}}/config
+
+###
+GET {{base}}/metrics

@@ -1,0 +1,30 @@
+import { check } from 'k6';
+import http from 'k6/http';
+
+export const options = {
+  scenarios: {
+    my_scenario1: {
+      executor: 'constant-arrival-rate',
+      duration: '60s', // total duration
+      preAllocatedVUs: 500, // to allocate runtime resources
+
+      rate: 5000, // number of constant iterations given `timeUnit`
+      timeUnit: '1s',
+    },
+  },
+};
+
+export default function () {
+  // const payload = JSON.stringify({
+  //   name: 'lorem',
+  //   surname: 'ipsum',
+  // });
+  // const headers = { 'Content-Type': 'application/json' };
+  const res = http.get('http://demo.local/public');
+
+  check(res, {
+    'Get status is 200': (r) => res.status === 200,
+    'Get Content-Type header': (r) => res.headers['Content-Type'] === 'application/json; charset=utf-8',
+    'Get response OK': (r) => res.status === 200 && res.json().Method === 'GET',
+  });
+}

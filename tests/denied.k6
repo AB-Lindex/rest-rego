@@ -1,0 +1,27 @@
+import { check } from 'k6';
+import http from 'k6/http';
+
+export const options = {
+  scenarios: {
+    my_scenario1: {
+      startVUs: 0,
+      gracefulRampDown: '0s',
+      executor: 'ramping-vus',
+      stages: [
+        { duration: '60s', target: 10 },
+        { duration: '60s', target: 10 },
+        { duration: '60s', target: 100 },
+        { duration: '60s', target: 100 },
+        { duration: '60s', target: 0 },
+      ],
+    },
+  },
+};
+
+export default function () {
+  const res = http.get('http://demo.local/denied');
+
+  check(res, {
+    'Get status is 403': (r) => res.status === 200,
+  });
+}

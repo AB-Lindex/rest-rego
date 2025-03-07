@@ -1,0 +1,15 @@
+namespace: demo
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: policies
+    files:
+      - request.rego
+
+resources:
+  - deployment.yaml
+  - serviceaccount.yaml
+  - service.yaml
+  - ingress.yaml

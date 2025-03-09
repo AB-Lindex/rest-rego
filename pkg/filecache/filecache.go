@@ -1,6 +1,7 @@
 package filecache
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -45,29 +46,29 @@ func New(folder string) (*Cache, error) {
 	}, nil
 }
 
-func (c *Cache) Watch() {
+func (c *Cache) Watch(ctx context.Context) error {
 	slog.Info("filecache: watching folder", "folder", c.folder)
-	go func() {
-		for {
-			select {
-			case event, ok := <-c.watcher.Events:
-				if !ok {
-					return
-				}
-				// log.Println("watcher-event:", event)
-				if event.Has(fsnotify.Write) {
-					name := path.Base(event.Name)
-					// log.Println("watcher-modified file:", event.Name, name)
-					c.invalidate(name)
-				}
-			case err, ok := <-c.watcher.Errors:
-				if !ok {
-					return
-				}
-				slog.Error("filecache: watcher error", "error", err)
+	for {
+		select {
+		case event, ok := <-c.watcher.Events:
+			if !ok {
+				return nil
 			}
+			// log.Println("watcher-event:", event)
+			if event.Has(fsnotify.Write) {
+				name := path.Base(event.Name)
+				// log.Println("watcher-modified file:", event.Name, name)
+				c.invalidate(name)
+			}
+		case err, ok := <-c.watcher.Errors:
+			if !ok {
+				return err
+			}
+			slog.Error("filecache: watcher error", "error", err)
+		case <-ctx.Done():
+			return nil
 		}
-	}()
+	}
 }
 
 func (c *Cache) invalidate(name string) {

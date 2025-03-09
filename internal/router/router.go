@@ -67,33 +67,33 @@ func New(listenAddr, requestName, backend string, auth types.AuthProvider, valid
 }
 
 // ListenAndServe starts the server (in background)
-func (proxy *Proxy) ListenAndServe() {
+func (proxy *Proxy) ListenAndServe() error {
 	proxy.server = &http.Server{
 		Addr:    proxy.listenAddr,
 		Handler: proxy.mux,
 	}
-	go func() {
-		slog.Info("router: starting server", "addr", proxy.listenAddr)
-		err := proxy.server.ListenAndServe()
-		if err != nil {
-			if err == http.ErrServerClosed {
-				slog.Info("router: server closed")
-			} else {
-				slog.Warn("router: server aborted", "error", err)
-			}
+
+	slog.Info("router: starting server", "addr", proxy.listenAddr)
+	err := proxy.server.ListenAndServe()
+	if err != nil {
+		if err == http.ErrServerClosed {
+			slog.Info("router: server closed")
 		} else {
-			slog.Error("router: server stopped")
+			slog.Warn("router: server aborted", "error", err)
 		}
-	}()
+	} else {
+		slog.Error("router: server stopped")
+	}
+
+	return err
 }
 
 // Close stops the server
-func (proxy *Proxy) Close() {
+func (proxy *Proxy) Close(ctx context.Context) error {
 	if proxy.server != nil {
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Minute))
-		proxy.server.Shutdown(ctx)
-		defer cancel()
+		return proxy.server.Shutdown(ctx)
 	}
+	return nil
 }
 
 func (proxy *Proxy) authHandler(next http.Handler) http.Handler {

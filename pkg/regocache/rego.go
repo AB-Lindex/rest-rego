@@ -37,8 +37,8 @@ func (r *RegoCache) Close() {
 	r.cache.Close()
 }
 
-func (r *RegoCache) Watch() {
-	r.cache.Watch()
+func (r *RegoCache) Watch(ctx context.Context) error {
+	return r.cache.Watch(ctx)
 }
 
 func (r *RegoCache) GetRego(name string) (*rego.PreparedEvalQuery, error) {

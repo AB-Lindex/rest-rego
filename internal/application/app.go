@@ -1,17 +1,19 @@
 package application
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"os/signal"
-	"syscall"
+	"net/http"
+	"time"
 
 	"github.com/AB-Lindex/rest-rego/internal/azure"
 	"github.com/AB-Lindex/rest-rego/internal/config"
 	"github.com/AB-Lindex/rest-rego/internal/router"
 	"github.com/AB-Lindex/rest-rego/internal/types"
 	"github.com/AB-Lindex/rest-rego/pkg/regocache"
+	"golang.org/x/sync/errgroup"
 )
 
 // AppData is the main application data structure and coordinates the business-logic
@@ -56,30 +58,53 @@ func New() (*AppData, bool) {
 	return app, true
 }
 
-// Close closes the application
-func (app *AppData) Close() {
-	slog.Debug("closing router...")
-	app.router.Close()
-	slog.Debug("closing regos...")
-	app.regos.Close()
-	slog.Info("all closed - exiting")
-}
-
 // Run starts the application
-func (app *AppData) Run() {
-	cancelChan := make(chan os.Signal, 1)
-	signal.Notify(cancelChan, syscall.SIGTERM, syscall.SIGINT)
+func (app *AppData) Run(ctx context.Context) error {
+	g, gCtx := errgroup.WithContext(ctx)
 
-	app.regos.Watch()
-	app.router.ListenAndServe()
+	g.Go(func() error {
+		err := app.regos.Watch(gCtx)
+		if err != nil {
+			slog.Error("application: rego watch error", "error", err)
+			return err
+		}
 
-	// go func() {
-	// 	for {
-	// 		time.Sleep(10 * time.Second)
-	// 		fmt.Println("Loop tick")
-	// 	}
-	// }()
+		return nil
+	})
 
-	sig := <-cancelChan
-	slog.Warn("application: caught signal", "signal", sig)
+	g.Go(func() error {
+		err := app.router.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+
+		return nil
+	})
+
+	g.Go(func() error {
+		<-gCtx.Done()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Minute)
+		defer shutdownCancel()
+		err := app.router.Close(shutdownCtx)
+		if err != nil {
+			slog.Error("application: router shutdown error", "error", err)
+			return err
+		}
+
+		return nil
+	})
+
+	g.Go(func() error {
+		<-gCtx.Done()
+		app.regos.Close()
+		return nil
+	})
+
+	err := g.Wait()
+	if err != nil {
+		slog.Error("application: error", "error", err)
+		return err
+	}
+
+	return nil
 }

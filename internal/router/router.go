@@ -28,13 +28,15 @@ type Proxy struct {
 	validator   types.Validator
 	backendURL  string
 	backend     *httputil.ReverseProxy
+	authKey     string
 }
 
 // New creates a new instance of the Proxy
-func New(listenAddr, requestName, backend string, auth types.AuthProvider, validator types.Validator) *Proxy {
+func New(listenAddr, requestName, authKey, backend string, auth types.AuthProvider, validator types.Validator) *Proxy {
 	proxy := &Proxy{
 		listenAddr:  listenAddr,
 		requestName: requestName,
+		authKey:     authKey,
 		backendURL:  backend,
 	}
 	remote, err := url.Parse(proxy.backendURL)
@@ -157,7 +159,7 @@ func (proxy *Proxy) WrapHandler(next http.Handler) http.Handler {
 		w2 := bufferedresponse.Wrap(w)
 		defer w2.Flush()
 
-		info := types.NewInfo(r)
+		info := types.NewInfo(r, proxy.authKey)
 
 		r2 := info.RequestWithInfo(r)
 

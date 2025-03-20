@@ -48,7 +48,13 @@ func New() (*AppData, bool) {
 	// create router
 	backend := fmt.Sprintf("%s://%s:%d", app.config.BackendScheme, app.config.BackendHost, app.config.BackendPort)
 	slog.Debug("application: creating router", "addr", app.config.ListenAddr, "proxy", backend)
-	app.router = router.New(app.config.ListenAddr, app.config.RequestRego, backend, app.auth, app.regos)
+	app.router = router.New(
+		app.config.ListenAddr,
+		app.config.RequestRego,
+		app.config.AuthHeader,
+		backend,
+		app.auth,
+		app.regos)
 	if app.router == nil {
 		return nil, false
 	}

@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"strings"
 )
@@ -22,10 +23,19 @@ type Info struct {
 
 // RequestInfo is the request information for the rego-policy
 type RequestInfo struct {
-	Method string   `json:"method"`
-	Path   []string `json:"path"`
-	Size   int64    `json:"size"`
-	ID     string   `json:"id,omitempty"`
+	Method  string                 `json:"method"`
+	Path    []string               `json:"path"`
+	Headers map[string]interface{} `json:"headers"`
+	Auth    *RequestAuth           `json:"auth"`
+	Size    int64                  `json:"size"`
+	ID      string                 `json:"id,omitempty"`
+}
+
+type RequestAuth struct {
+	Kind     string `json:"kind,omitempty"`
+	Token    string `json:"token,omitempty"`
+	User     string `json:"user,omitempty"`
+	Password string `json:"password,omitempty"`
 }
 
 // type JWTInfo struct {
@@ -34,12 +44,44 @@ type RequestInfo struct {
 // }
 
 // NewInfo creates a new instance of the Info based on the request
-func NewInfo(r *http.Request) *Info {
+func NewInfo(r *http.Request, authKey string) *Info {
 	i := new(Info)
 	i.Request.Method = r.Method
 	i.Request.Path = strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	i.Request.Size = r.ContentLength
 	i.URL = r.URL.String()
+
+	i.Request.Headers = make(map[string]interface{})
+	for k, v := range r.Header {
+		if len(v) == 1 {
+			i.Request.Headers[k] = v[0]
+		} else {
+			i.Request.Headers[k] = v
+		}
+	}
+
+	if authHdr, ok := i.Request.Headers[authKey]; ok {
+		a := &RequestAuth{}
+		parts := strings.SplitN(authHdr.(string), " ", 2)
+		if len(parts) == 2 {
+			a.Kind = parts[0]
+			a.Token = strings.TrimSpace(parts[1])
+		} else {
+			a.Token = parts[0]
+		}
+		if strings.EqualFold(a.Kind, "basic") {
+			if userpwd, err := base64.StdEncoding.DecodeString(a.Token); err == nil {
+				parts = strings.SplitN(string(userpwd), ":", 2)
+				if len(parts) >= 1 {
+					a.User = parts[0]
+				}
+				if len(parts) >= 2 {
+					a.Password = parts[1]
+				}
+			}
+		}
+		i.Request.Auth = a
+	}
 
 	return i
 }

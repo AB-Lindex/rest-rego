@@ -13,6 +13,17 @@ Content-Type: application/x-www-form-urlencoded
 client_id={{appid}}&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default&client_secret={{secret}}&grant_type=client_credentials
 
 ###
+# Login - v2
+# @name login2
+@scope=api%3A%2F%2Flindex.com%2F.default
+POST https://login.microsoftonline.com/{{tenant}}/oauth2/v2.0/token
+Host: login.microsoftonline.com
+Content-Type: application/x-www-form-urlencoded
+
+client_id={{appid}}&scope={{scope}}&client_secret={{secret}}&grant_type=client_credentials
+
+
+###
 # Azure Info
 GET https://graph.microsoft.com/v1.0/servicePrincipals(appId='{{appid}}')
 Authorization: Bearer {{login.response.body.$.access_token}}
@@ -42,3 +53,7 @@ Authorization: Bearer {{login.response.body.$.access_token}}
 
 ###
 GET {{base}}/test/public/asdasd
+
+###
+GET {{base}}/test/public/asdasd
+Authorization: Basic kalle:olle

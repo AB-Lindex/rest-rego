@@ -12,6 +12,7 @@ type Fields struct {
 	Verbose       bool   `arg:"-v,help:verbosity"`
 	Debug         bool   `arg:"--debug" help:"print policy request and result"`
 	PolicyDir     string `arg:"-d,--directory,env:POLICY_DIR" default:"./policies" help:"directory containing policy files" placeholder:"DIR"`
+	FilePattern   string `arg:"--pattern,env:FILE_PATTERN" default:"*.rego" help:"pattern for policy files" placeholder:"PATTERN"`
 	RequestRego   string `arg:"-r,env:REQUEST" default:"request.rego" help:"policy for incoming requests" placeholder:"FILE"`
 	ListenAddr    string `arg:"-l,--listen,env:LISTEN_ADDR" default:":8181" help:"port for to listen on for proxy" placeholder:"ADDR"`
 	MgmtAddr      string `arg:"-m,--management,env:MGMT_ADDR" default:":8182" help:"port to listen on for management (probes)" placeholder:"ADDR"`

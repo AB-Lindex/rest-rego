@@ -32,7 +32,7 @@ func New() (*AppData, bool) {
 
 	// create file-cache
 	slog.Debug("application: creating policy cache", "dir", app.config.PolicyDir)
-	c, err := regocache.New(app.config.PolicyDir, app.config.Debug)
+	c, err := regocache.New(app.config.PolicyDir, app.config.FilePattern, app.config.Debug, app.config.RequestRego)
 	if err != nil || c == nil {
 		return nil, false
 	}
@@ -72,7 +72,7 @@ func (app *AppData) Close() {
 }
 
 // Run starts the application
-func (app *AppData) Run() {
+func (app *AppData) Run() bool {
 	cancelChan := make(chan os.Signal, 1)
 	signal.Notify(cancelChan, syscall.SIGTERM, syscall.SIGINT)
 
@@ -86,6 +86,11 @@ func (app *AppData) Run() {
 	// 	}
 	// }()
 
+	if !app.regos.Ready() {
+		slog.Warn("application: waiting for regos to be ready")
+	}
+
 	sig := <-cancelChan
 	slog.Warn("application: caught signal", "signal", sig)
+	return app.regos.Ready()
 }

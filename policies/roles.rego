@@ -1,4 +1,4 @@
-package roles.rego
+package policies
 
 # This policy is used to control access to the API
 default allow := false

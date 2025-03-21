@@ -56,4 +56,4 @@ GET {{base}}/test/public/asdasd
 
 ###
 GET {{base}}/test/public/asdasd
-Authorization: Basic kalle:olle
+Authorization: Basic a2FsbGU6b2xsZQ==

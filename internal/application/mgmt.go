@@ -19,20 +19,28 @@ func (app *AppData) startMgmt() {
 	metrics.New()
 
 	mgmt.mux = chi.NewRouter()
-	mgmt.mux.Get("/healthz", healthzHandler)
-	mgmt.mux.Get("/readyz", readyzHandler)
+	mgmt.mux.Get("/healthz", app.healthzHandler)
+	mgmt.mux.Get("/readyz", app.readyzHandler)
 	mgmt.mux.Get("/version", versionHandler)
-	mgmt.mux.Get("/config", configHandler)
+	mgmt.mux.Get("/config", app.configHandler)
 	mgmt.mux.Get("/metrics", metrics.Handler())
 
 	go http.ListenAndServe(app.config.MgmtAddr, mgmt.mux)
 }
 
-func healthzHandler(w http.ResponseWriter, r *http.Request) {
+func (app *AppData) healthzHandler(w http.ResponseWriter, r *http.Request) {
+	if !app.regos.Ready() {
+		w.WriteHeader(http.StatusFailedDependency)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
-func readyzHandler(w http.ResponseWriter, r *http.Request) {
+func (app *AppData) readyzHandler(w http.ResponseWriter, r *http.Request) {
+	if !app.regos.Ready() {
+		w.WriteHeader(http.StatusFailedDependency)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -41,6 +49,7 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func configHandler(w http.ResponseWriter, r *http.Request) {
+func (app *AppData) configHandler(w http.ResponseWriter, r *http.Request) {
+	app.regos.Info()
 	w.WriteHeader(http.StatusOK)
 }

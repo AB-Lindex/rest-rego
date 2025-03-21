@@ -1,11 +1,13 @@
 package filecache
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -16,13 +18,16 @@ type File struct {
 }
 
 type Cache struct {
-	folder  string
-	files   map[string]*File
-	mtx     sync.Mutex
-	watcher *fsnotify.Watcher
+	folder    string
+	pattern   string
+	files     map[string]*File
+	mtx       sync.Mutex
+	watcher   *fsnotify.Watcher
+	callbacks []func(string)
+	queue     *delayedCallbacks
 }
 
-func New(folder string) (*Cache, error) {
+func New(folder, pattern string) (*Cache, error) {
 	stat, err := os.Lstat(folder)
 	if err != nil {
 		return nil, err
@@ -39,13 +44,37 @@ func New(folder string) (*Cache, error) {
 		return nil, err
 	}
 
-	return &Cache{
+	c := &Cache{
 		folder:  folder,
+		pattern: pattern,
 		watcher: w,
-	}, nil
+	}
+	c.queue = newDelayedCallbacks(500*time.Millisecond, c.doCallbacks)
+	return c, nil
+}
+
+func (c *Cache) AddCallback(fn func(string)) {
+	c.callbacks = append(c.callbacks, fn)
 }
 
 func (c *Cache) Watch() {
+	slog.Info("filecache: loading folder", "folder", c.folder)
+	files, err := os.ReadDir(c.folder)
+	if err != nil {
+		slog.Error("filecache: read folder error", "error", err)
+		return
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		name := file.Name()
+		if match, err := path.Match(c.pattern, name); !match || err != nil {
+			continue
+		}
+		c.doCallbacks(name)
+	}
+
 	slog.Info("filecache: watching folder", "folder", c.folder)
 	go func() {
 		for {
@@ -55,10 +84,15 @@ func (c *Cache) Watch() {
 					return
 				}
 				// log.Println("watcher-event:", event)
-				if event.Has(fsnotify.Write) {
+				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
 					name := path.Base(event.Name)
 					// log.Println("watcher-modified file:", event.Name, name)
-					c.invalidate(name)
+					c.invalidate(name, fsnotify.Write)
+				}
+				if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
+					name := path.Base(event.Name)
+					// log.Println("watcher-removed file:", event.Name, name)
+					c.invalidate(name, fsnotify.Remove)
 				}
 			case err, ok := <-c.watcher.Errors:
 				if !ok {
@@ -70,16 +104,35 @@ func (c *Cache) Watch() {
 	}()
 }
 
-func (c *Cache) invalidate(name string) {
+func (c *Cache) doCallbacks(name string) {
+	for _, fn := range c.callbacks {
+		fn(name)
+	}
+}
+
+func (c *Cache) invalidate(name string, op fsnotify.Op) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
 	if f, ok := c.files[name]; ok {
+		if op == fsnotify.Remove {
+			slog.Info("filecache: detected deleted file - removing", "name", name)
+			delete(c.files, name)
+			c.queue.add(name)
+			return
+		}
+
 		if !f.dirty {
-			slog.Info("filecache: invalidating file", "name", name)
+			slog.Info("filecache: detected changed file", "name", name)
+			c.queue.add(name)
 		}
 		f.dirty = true
+		return
 	}
+
+	slog.Info("filecache: detected new file", "name", name)
+	go c.Get(name)
+	c.queue.add(name)
 }
 
 func (c *Cache) Close() {
@@ -94,30 +147,34 @@ func (c *Cache) Get(name string) ([]byte, bool, error) {
 	if ok && !f.dirty {
 		return f.data, false, nil
 	}
-	if f == nil {
-		f = new(File)
-	}
+
 	slog.Debug("filecache: reading file", "name", name)
-	data, updated, err := f.read(c.folder, name)
+	f, updated, err := c.readFile(c.folder, name)
 	if err != nil {
 		return nil, false, err
 	}
-	if !ok {
-		if c.files == nil {
-			c.files = make(map[string]*File)
-		}
-		c.files[name] = f
+	if f == nil {
+		slog.Debug("filecache: file gone - removing file", "name", name)
+		delete(c.files, name)
+		return nil, true, nil
 	}
-	return data, updated, nil
+
+	if c.files == nil {
+		c.files = make(map[string]*File)
+	}
+	c.files[name] = f
+	return f.data, updated, nil
 }
 
-func (f *File) read(folder, name string) ([]byte, bool, error) {
+func (c *Cache) readFile(folder, name string) (*File, bool, error) {
 	fname := path.Join(folder, name)
 	data, err := os.ReadFile(fname)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, false, nil
+		}
 		return nil, false, err
 	}
-	f.data = data
-	f.dirty = false
-	return f.data, true, nil
+
+	return &File{data: data}, true, nil
 }

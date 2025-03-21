@@ -1,4 +1,4 @@
-package request.rego
+package policies
 
 default allow := false
 

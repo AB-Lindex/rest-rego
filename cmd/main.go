@@ -14,6 +14,9 @@ func main() {
 	}
 	defer app.Close()
 
-	app.Run()
+	if !app.Run() {
+		slog.Warn("Application exited while not ready!")
+		os.Exit(1)
+	}
 	slog.Info("Application exiting...")
 }

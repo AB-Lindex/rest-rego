@@ -1,12 +1,14 @@
 package regocache
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/AB-Lindex/rest-rego/pkg/filecache"
 
@@ -18,19 +20,32 @@ var debug bool
 type RegoCache struct {
 	cache *filecache.Cache
 	regos map[string]*rego.PreparedEvalQuery
+	mtx   sync.Mutex
+	ready string
 }
 
-func New(folder string, debugFlag bool) (*RegoCache, error) {
+func New(folder, pattern string, debugFlag bool, readyName string) (*RegoCache, error) {
 	debug = debugFlag
 
-	c, err := filecache.New(folder)
+	c, err := filecache.New(folder, pattern)
 	if err != nil {
 		return nil, err
 	}
 	return &RegoCache{
 		cache: c,
 		regos: make(map[string]*rego.PreparedEvalQuery),
+		ready: readyName,
 	}, nil
+}
+
+func (r *RegoCache) Ready() bool {
+	if r == nil {
+		return false
+	}
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+	_, ok := r.regos[r.ready]
+	return ok
 }
 
 func (r *RegoCache) Close() {
@@ -38,7 +53,16 @@ func (r *RegoCache) Close() {
 }
 
 func (r *RegoCache) Watch() {
+	r.cache.AddCallback(r.Callback)
 	r.cache.Watch()
+}
+
+func (r *RegoCache) Callback(name string) {
+	slog.Info("rego: file update detected - reload", "file", name)
+	_, err := r.GetRego(name)
+	if err != nil {
+		slog.Error("rego: reload failed", "file", name, "error", err)
+	}
 }
 
 func (r *RegoCache) GetRego(name string) (*rego.PreparedEvalQuery, error) {
@@ -48,15 +72,38 @@ func (r *RegoCache) GetRego(name string) (*rego.PreparedEvalQuery, error) {
 		return nil, err
 	}
 
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+
+	if data == nil {
+		slog.Info("rego: deleting policy", "file", name)
+		delete(r.regos, name)
+		return nil, nil
+	}
+
 	query, found := r.regos[name]
 	if found && !dirty {
 		return query, nil
 	}
 
-	slog.Info("rego: compiling policy", "name", name)
+	var pkg string
+	for line := range bytes.Lines(data) {
+		if bytes.HasPrefix(line, []byte("package ")) {
+			pkg = string(bytes.TrimSpace(bytes.TrimPrefix(line, []byte("package "))))
+			break
+		}
+	}
+	if pkg == "" {
+		slog.Error("rego: package not found", "file", name)
+		return nil, fmt.Errorf("package not found")
+	}
+
+	slog.Info("rego: compiling policy", "file", name, "package", pkg)
+
+	question := fmt.Sprint("x = data.", pkg)
 
 	q, err := rego.New(
-		rego.Query("x = data."+name),
+		rego.Query(question),
 		rego.Module(name, string(data)),
 	).PrepareForEval(context.Background())
 	if err != nil {
@@ -96,8 +143,17 @@ func (r *RegoCache) Validate(name string, input interface{}) (interface{}, error
 		w.Write(buf1)
 		w.WriteString("\nresult:\n")
 		w.Write(buf2)
+		w.WriteByte('\n')
 		fmt.Fprint(os.Stdout, w.String())
 	}
 
 	return result, nil
+}
+
+func (r *RegoCache) Info() {
+	fmt.Println("RegoCache - status")
+	for k := range r.regos {
+		fmt.Println("  -", k)
+	}
+	fmt.Println("---")
 }

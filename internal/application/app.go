@@ -9,6 +9,7 @@ import (
 
 	"github.com/AB-Lindex/rest-rego/internal/azure"
 	"github.com/AB-Lindex/rest-rego/internal/config"
+	"github.com/AB-Lindex/rest-rego/internal/jwtsupport"
 	"github.com/AB-Lindex/rest-rego/internal/router"
 	"github.com/AB-Lindex/rest-rego/internal/types"
 	"github.com/AB-Lindex/rest-rego/pkg/regocache"
@@ -39,10 +40,19 @@ func New() (*AppData, bool) {
 	app.regos = c
 
 	// create auth provider
-	slog.Debug("application: creating auth provider", "tenant", app.config.AzureTenant)
-	app.auth = azure.New(app.config.AzureTenant, app.config.AuthHeader)
-	if app.auth == nil {
-		return nil, false
+	if app.config.AzureTenant != "" {
+		slog.Debug("application: creating auth provider", "tenant", app.config.AzureTenant)
+		app.auth = azure.New(app.config.AzureTenant, app.config.AuthHeader)
+		if app.auth == nil {
+			return nil, false
+		}
+	}
+	if len(app.config.WellKnownURL) > 0 {
+		slog.Debug("application: creating jwt-auth-provider", "well-knowns", len(app.config.WellKnownURL))
+		app.auth = jwtsupport.New(app.config.WellKnownURL, app.config.Audiences)
+		if app.auth == nil {
+			return nil, false
+		}
 	}
 
 	// create router

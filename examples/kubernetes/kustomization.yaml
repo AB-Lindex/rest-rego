@@ -4,7 +4,7 @@ generatorOptions:
   disableNameSuffixHash: true
 
 configMapGenerator:
-  - name: policies
+  - name: demo-policies
     files:
       - request.rego
 

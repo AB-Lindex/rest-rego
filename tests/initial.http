@@ -36,24 +36,28 @@ Authorization: Bearer {{login.response.body.$.access_token}}
 
 ###
 GET {{base}}/user/someone
-Authorization: Bearer {{login.response.body.$.access_token}}
+Authorization: Bearer {{login2.response.body.$.access_token}}
 
 ###
 GET {{base}}/test1/test2
 Authorization: Bearer {{login.response.body.$.access_token}}
 
 ###
+GET {{base}}/test1/test2
+Authorization: Bearer {{login2.response.body.$.access_token}}
+
+###
 GET {{base}}/xyzzy/1234
-Authorization: Bearer {{login.response.body.$.access_token}}
+Authorization: Bearer {{login2.response.body.$.access_token}}
 
 
 ###
 GET {{base}}/public/asdasd
-Authorization: Bearer {{login.response.body.$.access_token}}
+Authorization: Bearer {{login2.response.body.$.access_token}}
 
 ###
 GET {{base}}/test/public/asdasd
 
 ###
-GET {{base}}/test/public/asdasd
+GET {{base}}/test/public/asdasdasd
 Authorization: Basic a2FsbGU6b2xsZQ==

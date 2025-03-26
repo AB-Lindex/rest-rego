@@ -54,6 +54,7 @@ func New(listenAddr, requestName, authKey, backend string, auth types.AuthProvid
 
 	proxy.mux = chi.NewRouter()
 	proxy.mux.Use(
+		proxy.CleanupHandler, // cleanup before any other processing
 		proxy.WrapHandler,
 		metrics.Wrap,
 		proxy.authHandler,

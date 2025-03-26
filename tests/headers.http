@@ -1,0 +1,6 @@
+@base=http://localhost:8181
+
+###
+GET {{base}}/header-test
+Test-header: 123
+x-restrego-fake: boo

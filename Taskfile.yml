@@ -1,0 +1,38 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default:
+    preconditions:
+      - which tail
+      - which tr
+      - which sed
+      - which gum
+    cmds:
+      - task: choose
+
+  choose:
+    dep: [prereq]
+    vars:
+      TITLE:
+        sh: task --list | head -1
+      TASKS:
+        sh: |
+          task --list --sort none |
+          tail +2 |
+          tr "\'" "\`" |
+          sed -E "s/(.*)/'\1'/" | tr "\n" " "
+      CHOICE:
+        sh: gum choose --header="{{.TITLE}}" {{.TASKS}}
+      TASK:
+        sh: echo "{{.CHOICE}}" | sed -E 's/\* ([^:]+):.*/\1/'
+    cmds:
+      - task: "{{.TASK}}"
+    silent: true
+      
+  test:
+    desc: Run all tests
+    cmds:
+      - find . -name "*_test.go" | xargs -n1 dirname | sort -u | xargs -n1 go test
+  

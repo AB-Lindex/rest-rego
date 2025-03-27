@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/AB-Lindex/rest-rego/internal/types"
@@ -47,5 +48,11 @@ func New() *Fields {
 		slog.Error("config: audiences must be provided when using well-known")
 		os.Exit(1)
 	}
+	if len(f.AuthHeader) == 0 {
+		slog.Error("config: auth-header must be provided")
+		os.Exit(1)
+	}
+	// need to make sure the auth-header is in proper canonical format
+	f.AuthHeader = http.CanonicalHeaderKey(f.AuthHeader)
 	return f
 }

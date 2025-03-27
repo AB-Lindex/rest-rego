@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,21 +14,7 @@ import (
 	"github.com/AB-Lindex/rest-rego/internal/types"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ninlil/butler/bufferedresponse"
 )
-
-// Proxy is the main router and proxy-handler
-type Proxy struct {
-	listenAddr  string
-	requestName string
-	mux         *chi.Mux
-	server      *http.Server
-	auth        types.AuthProvider
-	validator   types.Validator
-	backendURL  string
-	backend     *httputil.ReverseProxy
-	authKey     string
-}
 
 // New creates a new instance of the Proxy
 func New(listenAddr, requestName, authKey, backend string, auth types.AuthProvider, validator types.Validator) *Proxy {
@@ -99,85 +84,6 @@ func (proxy *Proxy) Close() {
 	}
 }
 
-func (proxy *Proxy) authHandler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		info := types.GetInfo(r)
-		if info == nil {
-			http.Error(w, "internal error - missing context", http.StatusInternalServerError)
-			return
-		}
-
-		err := proxy.auth.Authenticate(info, r)
-		if err != nil {
-			slog.Error("router: authentication error", "error", err)
-			http.Error(w, "authentication error", http.StatusInternalServerError)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (proxy *Proxy) policyHandler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		info := types.GetInfo(r)
-		if info == nil {
-			http.Error(w, "internal error - missing context", http.StatusInternalServerError)
-			return
-		}
-
-		result, err := proxy.validator.Validate(proxy.requestName, info)
-		if err != nil {
-			slog.Error("router: request validation error", "error", err)
-			result = err.Error()
-			// http.Error(w, "internal validator error", http.StatusInternalServerError)
-			// return
-		}
-
-		info.Result = result
-
-		resultMap, ok := result.(map[string]interface{})
-		if !ok {
-			http.Error(w, "internal validator error", http.StatusInternalServerError)
-			return
-		}
-		if resultMap["allow"] == false {
-			http.Error(w, "access denied", http.StatusForbidden)
-			return
-		}
-		if url, ok := resultMap["url"].(string); ok && url != "" {
-			info.URL = url
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-// WrapHandler wraps the handler for buffered-response and info-context
-func (proxy *Proxy) WrapHandler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		now := time.Now()
-		w2 := bufferedresponse.Wrap(w)
-		defer w2.Flush()
-
-		info := types.NewInfo(r, proxy.authKey)
-
-		r2 := info.RequestWithInfo(r)
-
-		next.ServeHTTP(w2, r2)
-
-		// wrap-up
-		w2.Header().Set("Content-Length", strconv.Itoa(w2.Size()))
-
-		slog.Info(fmt.Sprintf("%s %s", r.Method, r.URL.Path),
-			"status", w2.Status(),
-			"duration", time.Since(now),
-			"size", w2.Size(),
-			"id", info.Request.ID,
-		)
-	})
-}
-
 // ServeHTTP is the main handler
 func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
@@ -212,15 +118,4 @@ func (proxy *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	proxy.backend.ServeHTTP(w, r)
-	// // TODO: proxy to actual backend
-	// info := types.GetInfo(r)
-	// buf, err := json.Marshal(&info)
-	// if err != nil {
-	// 	http.Error(w, "internal error", http.StatusInternalServerError)
-	// 	return
-	// }
-	// w.Write(buf)
-
 }
-
-const headerPrefix = "X-RestRego-"

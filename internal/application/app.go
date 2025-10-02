@@ -39,20 +39,24 @@ func New() (*AppData, bool) {
 	}
 	app.regos = c
 
-	// create auth provider
-	if app.config.AzureTenant != "" {
+	switch {
+	case len(app.config.AzureTenant) > 0:
 		slog.Debug("application: creating auth provider", "tenant", app.config.AzureTenant)
 		app.auth = azure.New(app.config.AzureTenant, app.config.AuthHeader)
 		if app.auth == nil {
 			return nil, false
 		}
-	}
-	if len(app.config.WellKnownURL) > 0 {
+
+	case len(app.config.WellKnownURL) > 0:
 		slog.Debug("application: creating jwt-auth-provider", "well-knowns", len(app.config.WellKnownURL))
 		app.auth = jwtsupport.New(app.config.WellKnownURL, app.config.Audiences)
 		if app.auth == nil {
 			return nil, false
 		}
+
+	default:
+		slog.Error("application: no auth-provider configured")
+		return nil, false
 	}
 
 	// create router

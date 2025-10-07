@@ -49,7 +49,7 @@ func New() (*AppData, bool) {
 
 	case len(app.config.WellKnownURL) > 0:
 		slog.Debug("application: creating jwt-auth-provider", "well-knowns", len(app.config.WellKnownURL))
-		app.auth = jwtsupport.New(app.config.WellKnownURL, app.config.Audiences)
+		app.auth = jwtsupport.New(app.config.WellKnownURL, app.config.AudienceKey, app.config.Audiences, app.config.AuthKind)
 		if app.auth == nil {
 			return nil, false
 		}

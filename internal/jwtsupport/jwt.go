@@ -17,6 +17,8 @@ import (
 
 type JWTSupport struct {
 	audiences     []string
+	audienceKey   string
+	authKind      string
 	wellKnowns    []string
 	wellknownList []*wellKnownData
 	cache         *jwk.Cache
@@ -71,10 +73,12 @@ func (wkd *wellKnownData) PostFetch(url string, set jwk.Set) (jwk.Set, error) {
 	return newset, nil
 }
 
-func New(wellKnowns, audList []string) *JWTSupport {
+func New(wellKnowns []string, audKey string, audList []string, kind string) *JWTSupport {
 	j := &JWTSupport{
-		wellKnowns: wellKnowns,
-		audiences:  audList,
+		wellKnowns:  wellKnowns,
+		audienceKey: audKey,
+		audiences:   audList,
+		authKind:    kind,
 	}
 
 	j.LoadWellKnowns()
@@ -152,8 +156,8 @@ func (j *JWTSupport) Authenticate(info *types.Info, r *http.Request) error {
 		return nil
 		//return types.ErrNoAuth
 	}
-	if !strings.EqualFold(info.Request.Auth.Kind, "bearer") {
-		slog.Debug("jwtsupport: not a bearer token")
+	if !strings.EqualFold(info.Request.Auth.Kind, j.authKind) {
+		slog.Debug("jwtsupport: token kind dont match", "kind", j.authKind, "got", info.Request.Auth.Kind)
 		return nil
 		//return types.ErrNoAuth
 	}
@@ -166,12 +170,26 @@ func (j *JWTSupport) Authenticate(info *types.Info, r *http.Request) error {
 		}
 		for _, aud := range j.audiences {
 			slog.Debug("jwtsupport: parsing token", "aud", aud, "keys", ks.Len())
-			token, err := jwt.Parse(request,
-				jwt.WithKeySet(ks),
-				jwt.WithValidate(true),
-				jwt.WithVerify(true),
-				jwt.WithAudience(aud),
-			)
+
+			var options []jwt.ParseOption
+			if ks.Len() == 1 {
+				if key, ok := ks.Key(0); ok {
+					options = append(options, jwt.WithKey(key.Algorithm(), key))
+				}
+			} else {
+				options = append(options, jwt.WithKeySet(ks))
+			}
+
+			options = append(options, jwt.WithValidate(true))
+			options = append(options, jwt.WithVerify(true))
+
+			if j.audienceKey == "aud" {
+				options = append(options, jwt.WithAudience(aud))
+			} else {
+				options = append(options, jwt.WithClaimValue(j.audienceKey, aud))
+			}
+
+			token, err := jwt.Parse(request, options...)
 			if err != nil {
 				slog.Debug("jwtsupport: failed to parse token", "error", err)
 				continue

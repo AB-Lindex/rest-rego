@@ -20,11 +20,13 @@ type Fields struct {
 	MgmtAddr      string   `arg:"-m,--management,env:MGMT_ADDR" default:":8182" help:"port to listen on for management (probes)" placeholder:"ADDR"`
 	AzureTenant   string   `arg:"-t,--azure-tenant,env:AZURE_TENANT" help:"azure tenant id" placeholder:"ID"`
 	AuthHeader    string   `arg:"-a,--auth-header,env:AUTH_HEADER" default:"Authorization" placeholder:"HEADER"`
+	AuthKind      string   `arg:"-k,--auth-kind,env:AUTH_KIND" default:"bearer" placeholder:"KIND"`
 	BackendScheme string   `arg:"-s,--backend-scheme,env:BACKEND_SCHEME" default:"http" help:"scheme for backend" placeholder:"SCHEME"`
 	BackendHost   string   `arg:"-h,--backend-host,env:BACKEND_HOST" default:"localhost" help:"host for backend" placeholder:"HOST"`
 	BackendPort   int      `arg:"-p,--backend-port,env:BACKEND_PORT" default:"8080" help:"port for backend" placeholder:"PORT"`
 	WellKnownURL  []string `arg:"-w,--well-known,env:WELLKNOWN_OIDC" help:"well-known URL for JWK verifications" placeholder:"URL"`
 	Audiences     []string `arg:"-u,--audience,env:JWT_AUDIENCES" help:"audience for JWT verification" placeholder:"AUDIENCE"`
+	AudienceKey   string   `arg:"--audience-key,env:JWT_AUDIENCE_KEY" default:"aud" help:"claim key to use for audience check" placeholder:"KEY"`
 }
 
 func (f *Fields) Version() string {

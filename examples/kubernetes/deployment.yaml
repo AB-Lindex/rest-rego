@@ -33,8 +33,11 @@ spec:
           env:
             - name: BACKEND_PORT
               value: '10000'
-            - name: AZURE_TENANT
-              value: '10101010-2020-3030-4040-505050505050'
+            # JWT/OIDC authentication (recommended)
+            - name: WELLKNOWN_OIDC
+              value: 'https://login.microsoftonline.com/YOUR-TENANT-ID/v2.0/.well-known/openid-configuration'
+            - name: JWT_AUDIENCES
+              value: 'api://your-guard-app-id'
           ports:
             - containerPort: 8181
               name: http

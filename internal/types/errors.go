@@ -1,11 +1,15 @@
 package types
 
-type myErrors string
+import "errors"
 
-const (
-	ErrNoAuth myErrors = "No authorization header"
+// Authentication errors
+var (
+	ErrAuthenticationFailed      = errors.New("authentication failed")
+	ErrAuthenticationUnavailable = errors.New("authentication service unavailable")
 )
 
-func (e myErrors) Error() string {
-	return string(e)
+// IsAuthenticationError checks if an error is an authentication error
+func IsAuthenticationError(err error) bool {
+	return errors.Is(err, ErrAuthenticationFailed) ||
+		errors.Is(err, ErrAuthenticationUnavailable)
 }

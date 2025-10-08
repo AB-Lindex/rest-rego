@@ -23,6 +23,7 @@ type JWTSupport struct {
 	wellknownList []*wellKnownData
 	cache         *jwk.Cache
 	JWKS          []jwk.Set
+	permissive    bool // true = treat auth failures as anonymous
 }
 
 var algConverter = make(map[string]jwa.KeyAlgorithm)
@@ -73,12 +74,13 @@ func (wkd *wellKnownData) PostFetch(url string, set jwk.Set) (jwk.Set, error) {
 	return newset, nil
 }
 
-func New(wellKnowns []string, audKey string, audList []string, kind string) *JWTSupport {
+func New(wellKnowns []string, audKey string, audList []string, kind string, permissive bool) *JWTSupport {
 	j := &JWTSupport{
 		wellKnowns:  wellKnowns,
 		audienceKey: audKey,
 		audiences:   audList,
 		authKind:    kind,
+		permissive:  permissive,
 	}
 
 	j.LoadWellKnowns()
@@ -150,26 +152,40 @@ func (j *JWTSupport) LoadJWKS() {
 }
 
 func (j *JWTSupport) Authenticate(info *types.Info, r *http.Request) error {
-	slog.Debug("jwtsupport: authenticating request", "url", r.URL.Path)
+	// Case 1: No authentication header → Always allow as anonymous
 	if info.Request.Auth == nil {
-		slog.Debug("jwtsupport: info.Request.Auth == nil")
+		slog.Debug("jwtsupport: no authentication header, treating as anonymous")
 		return nil
-		//return types.ErrNoAuth
 	}
+
+	// Case 2: Wrong authentication kind
 	if !strings.EqualFold(info.Request.Auth.Kind, j.authKind) {
-		slog.Debug("jwtsupport: token kind dont match", "kind", j.authKind, "got", info.Request.Auth.Kind)
+		slog.Debug("jwtsupport: incorrect auth kind", "expected", j.authKind, "got", info.Request.Auth.Kind)
+
+		if !j.permissive {
+			slog.Warn("jwtsupport: rejecting request with wrong auth kind (strict mode)")
+			return types.ErrAuthenticationFailed
+		}
+
+		// Permissive mode: treat as anonymous
+		slog.Debug("jwtsupport: treating wrong auth kind as anonymous (permissive mode)")
 		return nil
-		//return types.ErrNoAuth
 	}
+
 	request := []byte(info.Request.Auth.Token)
+	lastError := error(nil)
+
+	// Try to validate token against all configured issuers
 	for _, wc := range j.wellknownList {
 		ks, err := j.cache.Get(context.Background(), wc.JwksURI)
 		if err != nil {
-			slog.Debug("jwtsupport: failed to get jwks", "url", wc.JwksURI, "error", err)
+			slog.Warn("jwtsupport: failed to fetch JWKS", "url", wc.JwksURI, "error", err)
+			lastError = err
 			continue
 		}
+
 		for _, aud := range j.audiences {
-			slog.Debug("jwtsupport: parsing token", "aud", aud, "keys", ks.Len())
+			slog.Debug("jwtsupport: validating token", "issuer", wc.JwksURI, "aud", aud)
 
 			var options []jwt.ParseOption
 			if ks.Len() == 1 {
@@ -191,13 +207,41 @@ func (j *JWTSupport) Authenticate(info *types.Info, r *http.Request) error {
 
 			token, err := jwt.Parse(request, options...)
 			if err != nil {
-				slog.Debug("jwtsupport: failed to parse token", "error", err)
+				slog.Debug("jwtsupport: token validation failed", "aud", aud, "error", err)
+				lastError = err
 				continue
 			}
+
+			// SUCCESS: Valid token
 			fields, _ := token.AsMap(context.Background())
 			info.JWT = fields
+			slog.Info("jwtsupport: authentication successful", "aud", aud)
 			return nil
 		}
 	}
-	return nil
+
+	// Case 3: Token validation failed for all issuers
+	if lastError != nil {
+		if !j.permissive {
+			// Strict mode: check if it's a system error vs validation error
+			errStr := lastError.Error()
+			if strings.Contains(errStr, "failed to fetch") ||
+				strings.Contains(errStr, "connection") ||
+				strings.Contains(errStr, "timeout") {
+				slog.Error("jwtsupport: authentication system unavailable (strict mode)", "error", lastError)
+				return types.ErrAuthenticationUnavailable
+			}
+
+			slog.Warn("jwtsupport: token validation failed, rejecting (strict mode)", "error", lastError)
+			return types.ErrAuthenticationFailed
+		}
+
+		// Permissive mode: treat validation failure as anonymous
+		slog.Debug("jwtsupport: token validation failed, treating as anonymous (permissive mode)", "error", lastError)
+		return nil
+	}
+
+	// Case 4: No well-known endpoints configured
+	slog.Error("jwtsupport: no well-known endpoints configured")
+	return types.ErrAuthenticationUnavailable
 }

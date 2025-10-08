@@ -42,14 +42,14 @@ func New() (*AppData, bool) {
 	switch {
 	case len(app.config.AzureTenant) > 0:
 		slog.Debug("application: creating auth provider", "tenant", app.config.AzureTenant)
-		app.auth = azure.New(app.config.AzureTenant, app.config.AuthHeader)
+		app.auth = azure.New(app.config.AzureTenant, app.config.AuthHeader, app.config.PermissiveAuth)
 		if app.auth == nil {
 			return nil, false
 		}
 
 	case len(app.config.WellKnownURL) > 0:
 		slog.Debug("application: creating jwt-auth-provider", "well-knowns", len(app.config.WellKnownURL))
-		app.auth = jwtsupport.New(app.config.WellKnownURL, app.config.AudienceKey, app.config.Audiences, app.config.AuthKind)
+		app.auth = jwtsupport.New(app.config.WellKnownURL, app.config.AudienceKey, app.config.Audiences, app.config.AuthKind, app.config.PermissiveAuth)
 		if app.auth == nil {
 			return nil, false
 		}

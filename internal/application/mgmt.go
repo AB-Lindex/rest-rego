@@ -1,6 +1,7 @@
 package application
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/AB-Lindex/rest-rego/internal/metrics"
@@ -10,8 +11,9 @@ import (
 )
 
 var mgmt struct {
-	mux *chi.Mux
-	reg *prometheus.Registry
+	mux    *chi.Mux
+	reg    *prometheus.Registry
+	server *http.Server
 }
 
 func (app *AppData) startMgmt() {
@@ -25,7 +27,24 @@ func (app *AppData) startMgmt() {
 	mgmt.mux.Get("/config", app.configHandler)
 	mgmt.mux.Get("/metrics", metrics.Handler())
 
-	go http.ListenAndServe(app.config.MgmtAddr, mgmt.mux)
+	mgmt.server = &http.Server{
+		Addr:    app.config.MgmtAddr,
+		Handler: mgmt.mux,
+
+		// Management endpoints are simple, use shorter timeouts (50% of proxy timeouts)
+		ReadHeaderTimeout: app.config.ReadHeaderTimeout / 2,
+		ReadTimeout:       app.config.ReadTimeout / 2,
+		WriteTimeout:      app.config.WriteTimeout / 2,
+		IdleTimeout:       app.config.IdleTimeout / 2,
+		MaxHeaderBytes:    1 << 20, // 1 MB
+	}
+
+	go func() {
+		slog.Info("mgmt: starting management server", "addr", app.config.MgmtAddr)
+		if err := mgmt.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("mgmt: server failed", "error", err)
+		}
+	}()
 }
 
 func (app *AppData) healthzHandler(w http.ResponseWriter, r *http.Request) {

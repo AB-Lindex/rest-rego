@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 
+	"github.com/AB-Lindex/rest-rego/internal/config"
 	"github.com/AB-Lindex/rest-rego/internal/types"
 	"github.com/go-chi/chi/v5"
 )
@@ -21,4 +22,5 @@ type Proxy struct {
 	backendURL  string
 	backend     *httputil.ReverseProxy
 	authKey     string
+	config      *config.Fields
 }

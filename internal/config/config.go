@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/AB-Lindex/rest-rego/internal/types"
 	"github.com/alexflint/go-arg"
@@ -28,10 +29,76 @@ type Fields struct {
 	Audiences      []string `arg:"-u,--audience,env:JWT_AUDIENCES" help:"audience for JWT verification" placeholder:"AUDIENCE"`
 	AudienceKey    string   `arg:"--audience-key,env:JWT_AUDIENCE_KEY" default:"aud" help:"claim key to use for audience check" placeholder:"KEY"`
 	PermissiveAuth bool     `arg:"--permissive-auth,env:PERMISSIVE_AUTH" default:"false" help:"allow invalid tokens to be treated as anonymous (default: false, strict mode)"`
+
+	// Timeout configuration for proxy server
+	ReadHeaderTimeout time.Duration `arg:"--read-header-timeout,env:READ_HEADER_TIMEOUT" default:"10s" help:"timeout for reading request headers"`
+	ReadTimeout       time.Duration `arg:"--read-timeout,env:READ_TIMEOUT" default:"30s" help:"timeout for reading entire request"`
+	WriteTimeout      time.Duration `arg:"--write-timeout,env:WRITE_TIMEOUT" default:"90s" help:"timeout for writing response"`
+	IdleTimeout       time.Duration `arg:"--idle-timeout,env:IDLE_TIMEOUT" default:"120s" help:"timeout for idle connections"`
+
+	// Timeout configuration for backend communication
+	BackendDialTimeout     time.Duration `arg:"--backend-dial-timeout,env:BACKEND_DIAL_TIMEOUT" default:"10s" help:"timeout for backend connection"`
+	BackendResponseTimeout time.Duration `arg:"--backend-response-timeout,env:BACKEND_RESPONSE_TIMEOUT" default:"30s" help:"timeout for backend response headers"`
+	BackendIdleConnTimeout time.Duration `arg:"--backend-idle-timeout,env:BACKEND_IDLE_TIMEOUT" default:"90s" help:"timeout for idle backend connections"`
 }
 
 func (f *Fields) Version() string {
 	return types.Version()
+}
+
+// validateTimeouts validates timeout configuration values
+func (f *Fields) validateTimeouts() {
+	// Minimum timeout: 1s (prevents accidental misconfiguration)
+	// Maximum timeout: 10m (generous but prevents indefinite hangs)
+	const (
+		minTimeout = 1 * time.Second
+		maxTimeout = 10 * time.Minute
+	)
+
+	timeouts := map[string]*time.Duration{
+		"read-header-timeout":      &f.ReadHeaderTimeout,
+		"read-timeout":             &f.ReadTimeout,
+		"write-timeout":            &f.WriteTimeout,
+		"idle-timeout":             &f.IdleTimeout,
+		"backend-dial-timeout":     &f.BackendDialTimeout,
+		"backend-response-timeout": &f.BackendResponseTimeout,
+		"backend-idle-timeout":     &f.BackendIdleConnTimeout,
+	}
+
+	for name, timeout := range timeouts {
+		if *timeout < minTimeout {
+			slog.Error("config: timeout too short",
+				"timeout", name,
+				"value", *timeout,
+				"minimum", minTimeout)
+			os.Exit(1)
+		}
+		if *timeout > maxTimeout {
+			slog.Error("config: timeout too long",
+				"timeout", name,
+				"value", *timeout,
+				"maximum", maxTimeout)
+			os.Exit(1)
+		}
+	}
+
+	// Logical validation: ReadTimeout should be >= ReadHeaderTimeout
+	if f.ReadTimeout < f.ReadHeaderTimeout {
+		slog.Error("config: read-timeout must be >= read-header-timeout",
+			"read-timeout", f.ReadTimeout,
+			"read-header-timeout", f.ReadHeaderTimeout)
+		os.Exit(1)
+	}
+
+	// Log timeout configuration at debug level
+	slog.Debug("config: timeout configuration validated",
+		"read-header", f.ReadHeaderTimeout,
+		"read", f.ReadTimeout,
+		"write", f.WriteTimeout,
+		"idle", f.IdleTimeout,
+		"backend-dial", f.BackendDialTimeout,
+		"backend-response", f.BackendResponseTimeout,
+		"backend-idle", f.BackendIdleConnTimeout)
 }
 
 // New creates a new instance of the configuration
@@ -42,6 +109,9 @@ func New() *Fields {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 		slog.Debug("config: verbosity enabled")
 	}
+
+	// Validate timeout configuration
+	f.validateTimeouts()
 
 	if f.AzureTenant != "" && len(f.WellKnownURL) > 0 {
 		slog.Error("config: only one auth-provider can be used (azure or well-known)")

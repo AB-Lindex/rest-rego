@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/AB-Lindex/rest-rego/internal/config"
 	"github.com/AB-Lindex/rest-rego/internal/metrics"
 	"github.com/AB-Lindex/rest-rego/internal/types"
 
@@ -17,12 +19,18 @@ import (
 )
 
 // New creates a new instance of the Proxy
-func New(listenAddr, requestName, authKey, backend string, auth types.AuthProvider, validator types.Validator) *Proxy {
+func New(auth types.AuthProvider, validator types.Validator, cfg *config.Fields) *Proxy {
+	// Build backend URL from config
+	backendURL := fmt.Sprintf("%s://%s:%d", cfg.BackendScheme, cfg.BackendHost, cfg.BackendPort)
+
+	slog.Debug("router: creating proxy", "listen", cfg.ListenAddr, "backend", backendURL)
+
 	proxy := &Proxy{
-		listenAddr:  listenAddr,
-		requestName: requestName,
-		authKey:     authKey,
-		backendURL:  backend,
+		listenAddr:  cfg.ListenAddr,
+		requestName: cfg.RequestRego,
+		authKey:     cfg.AuthHeader,
+		backendURL:  backendURL,
+		config:      cfg,
 	}
 	remote, err := url.Parse(proxy.backendURL)
 	if err != nil {
@@ -31,9 +39,36 @@ func New(listenAddr, requestName, authKey, backend string, auth types.AuthProvid
 	}
 	proxy.backend = httputil.NewSingleHostReverseProxy(remote)
 	proxy.backend.Transport = &http.Transport{
+		// Connection pooling
 		MaxIdleConns:        100,
 		MaxIdleConnsPerHost: 100,
+		MaxConnsPerHost:     0, // Unlimited, but controlled by timeouts
+
+		// Timeouts for backend communication (from config)
+		DialContext: (&net.Dialer{
+			Timeout:   cfg.BackendDialTimeout,
+			KeepAlive: 30 * time.Second, // TCP keepalive interval
+		}).DialContext,
+
+		TLSHandshakeTimeout:   cfg.BackendDialTimeout,     // TLS handshake uses dial timeout
+		ResponseHeaderTimeout: cfg.BackendResponseTimeout, // Time to receive response headers
+		ExpectContinueTimeout: 1 * time.Second,            // 100-continue timeout
+		IdleConnTimeout:       cfg.BackendIdleConnTimeout, // Idle connection timeout
+
+		// Prevent connection reuse issues
+		DisableKeepAlives:  false,
+		DisableCompression: false,
 	}
+
+	// Add error handler for backend failures
+	proxy.backend.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		slog.Error("router: backend proxy error",
+			"error", err,
+			"backend", proxy.backendURL,
+			"path", r.URL.Path)
+		http.Error(w, "bad gateway", http.StatusBadGateway)
+	}
+
 	// proxy.backend.Director = nil
 	// proxy.backend.Rewrite = proxy.Rewriter
 
@@ -59,6 +94,15 @@ func (proxy *Proxy) ListenAndServe() {
 	proxy.server = &http.Server{
 		Addr:    proxy.listenAddr,
 		Handler: proxy.mux,
+
+		// Timeouts to prevent slowloris and similar attacks (from config)
+		ReadHeaderTimeout: proxy.config.ReadHeaderTimeout,
+		ReadTimeout:       proxy.config.ReadTimeout,
+		WriteTimeout:      proxy.config.WriteTimeout,
+		IdleTimeout:       proxy.config.IdleTimeout,
+
+		// Maximum header size to prevent memory exhaustion
+		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 	go func() {
 		slog.Info("router: starting server", "addr", proxy.listenAddr)

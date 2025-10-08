@@ -1,11 +1,12 @@
 package application
 
 import (
-	"fmt"
+	"context"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/AB-Lindex/rest-rego/internal/azure"
 	"github.com/AB-Lindex/rest-rego/internal/config"
@@ -60,15 +61,7 @@ func New() (*AppData, bool) {
 	}
 
 	// create router
-	backend := fmt.Sprintf("%s://%s:%d", app.config.BackendScheme, app.config.BackendHost, app.config.BackendPort)
-	slog.Debug("application: creating router", "addr", app.config.ListenAddr, "proxy", backend)
-	app.router = router.New(
-		app.config.ListenAddr,
-		app.config.RequestRego,
-		app.config.AuthHeader,
-		backend,
-		app.auth,
-		app.regos)
+	app.router = router.New(app.auth, app.regos, app.config)
 	if app.router == nil {
 		return nil, false
 	}
@@ -78,6 +71,13 @@ func New() (*AppData, bool) {
 
 // Close closes the application
 func (app *AppData) Close() {
+	slog.Debug("closing management server...")
+	if mgmt.server != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		mgmt.server.Shutdown(ctx)
+		cancel()
+	}
+
 	slog.Debug("closing router...")
 	app.router.Close()
 	slog.Debug("closing regos...")

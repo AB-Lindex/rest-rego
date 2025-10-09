@@ -12,6 +12,10 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+const (
+	callbackDelay = 500 * time.Millisecond
+)
+
 type File struct {
 	dirty bool
 	data  []byte
@@ -49,7 +53,8 @@ func New(folder, pattern string) (*Cache, error) {
 		pattern: pattern,
 		watcher: w,
 	}
-	c.queue = newDelayedCallbacks(500*time.Millisecond, c.doCallbacks)
+
+	c.queue = newDelayedCallbacks(callbackDelay, c.doCallbacks)
 	return c, nil
 }
 

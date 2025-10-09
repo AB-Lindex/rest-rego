@@ -93,13 +93,6 @@ func (app *AppData) Run() bool {
 	app.regos.Watch()
 	app.router.ListenAndServe()
 
-	// go func() {
-	// 	for {
-	// 		time.Sleep(10 * time.Second)
-	// 		fmt.Println("Loop tick")
-	// 	}
-	// }()
-
 	if !app.regos.Ready() {
 		slog.Warn("application: waiting for regos to be ready")
 	}

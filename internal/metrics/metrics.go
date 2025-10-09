@@ -67,24 +67,6 @@ func New() {
 	)
 }
 
-// func Wrap0(handler http.Handler) http.HandlerFunc {
-// 	base := promhttp.InstrumentHandlerCounter(
-// 		metrics.requestsTotal,
-// 		promhttp.InstrumentHandlerDuration(
-// 			metrics.requestDuration,
-// 			promhttp.InstrumentHandlerRequestSize(
-// 				metrics.requestSize,
-// 				promhttp.InstrumentHandlerResponseSize(
-// 					metrics.responseSize,
-// 					handler,
-// 				),
-// 			),
-// 		),
-// 	)
-
-// 	return base.ServeHTTP
-// }
-
 // Handler returns the metrics handler for the /metrics endpoint
 func Handler() http.HandlerFunc {
 	return promhttp.HandlerFor(metrics.reg, promhttp.HandlerOpts{}).ServeHTTP
@@ -99,10 +81,6 @@ func Wrap(next http.Handler) http.Handler {
 		}
 
 		now := time.Now()
-
-		// in-flight
-		// g.Inc()
-		// defer g.Dec()
 
 		next.ServeHTTP(w2, r)
 

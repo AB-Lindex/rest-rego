@@ -123,8 +123,8 @@ func (proxy *Proxy) ListenAndServe() {
 func (proxy *Proxy) Close() {
 	if proxy.server != nil {
 		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Minute))
-		proxy.server.Shutdown(ctx)
 		defer cancel()
+		proxy.server.Shutdown(ctx)
 	}
 }
 

@@ -15,8 +15,8 @@ const ctxInfoKey ctxKey = 0
 type Info struct {
 	Request RequestInfo `json:"request"`
 	JWT     interface{} `json:"jwt,omitempty"`
-	User    interface{} `json:"user,omitempty,omitdefault"`
-	Result  interface{} `json:"result,omitempty,omitdefault"`
+	User    interface{} `json:"user,omitempty"`
+	Result  interface{} `json:"result,omitempty"`
 
 	URL string `json:"-"`
 }

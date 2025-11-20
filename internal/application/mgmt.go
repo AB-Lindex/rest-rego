@@ -20,6 +20,14 @@ func (app *AppData) startMgmt() {
 
 	metrics.New()
 
+	// Initialize blocked headers feature metric
+	metrics.SetBlockedHeadersExposed(app.config.ExposeBlockedHeaders)
+	if app.config.ExposeBlockedHeaders {
+		slog.Info("blocked headers feature enabled - X-Restrego-* headers will be exposed to policy")
+	} else {
+		slog.Info("blocked headers feature disabled - X-Restrego-* headers will be removed and not exposed to policy")
+	}
+
 	mgmt.mux = chi.NewRouter()
 	mgmt.mux.Get("/healthz", app.healthzHandler)
 	mgmt.mux.Get("/readyz", app.readyzHandler)

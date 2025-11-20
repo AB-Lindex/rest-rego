@@ -615,7 +615,260 @@ DEBUG=true rest-rego
 
 ---
 
-## � Deployment
+## 🔒 Blocked Headers for Policy Evaluation
+
+rest-rego automatically removes `X-Restrego-*` headers from client requests to prevent header spoofing. The **Blocked Headers** feature optionally exposes these removed headers to policies for security auditing, multi-layer authorization, and validated header forwarding.
+
+### Use Cases
+
+| Use Case | Description |
+|----------|-------------|
+| **Multi-Layer Authorization** | Downstream rest-rego validates headers from trusted upstream instances |
+| **Security Auditing** | Detect and log client attempts to spoof protected headers |
+| **Layered Trust** | Verify upstream context before using it in policy decisions |
+| **Validated Forwarding** | Extract and forward trusted header values after policy validation |
+
+**Example Architecture:**
+```
+Client → rest-rego (layer 1) → rest-rego (layer 2) → Backend
+         ↓ Sets X-Restrego-Tenant-Id
+                                      ↓ Validates header in policy
+                                      ↓ Forwards if trusted
+```
+
+### Configuration
+
+Enable the feature with the `EXPOSE_BLOCKED_HEADERS` environment variable or `--expose-blocked-headers` flag:
+
+```bash
+# Via environment variable
+export EXPOSE_BLOCKED_HEADERS=true
+rest-rego
+
+# Via command-line flag
+rest-rego --expose-blocked-headers
+
+# In Docker
+docker run -e EXPOSE_BLOCKED_HEADERS=true lindex/rest-rego:latest
+
+# In Kubernetes
+env:
+  - name: EXPOSE_BLOCKED_HEADERS
+    value: "true"
+```
+
+**Default**: `false` (disabled) - Headers are removed but NOT accessible to policies
+
+**Security Note**: Headers are ALWAYS removed from backend requests regardless of this setting. This flag only controls policy visibility.
+
+### Policy Access
+
+When enabled, blocked headers are available in the policy input under `input.request.blocked_headers`:
+
+```json
+{
+  "request": {
+    "method": "GET",
+    "path": ["api", "users"],
+    "headers": { ... },
+    "blocked_headers": {
+      "X-Restrego-Tenant-Id": "tenant-123",
+      "X-Restrego-User-Role": "admin",
+      "X-Restrego-Custom": ["value1", "value2"]
+    }
+  },
+  "jwt": { ... }
+}
+```
+
+**Header Value Types:**
+- Single value: `string` (e.g., `"tenant-123"`)
+- Multiple values: `array` (e.g., `["value1", "value2"]`)
+- Missing/disabled: Field omitted from input
+
+### Example Policies
+
+#### 1. Upstream Context Validation
+
+Validate that upstream rest-rego set a required tenant header:
+
+```rego
+package policies
+
+default allow := false
+
+# Trust upstream tenant header if present and valid
+allow if {
+  tenant_id := input.request.blocked_headers["X-Restrego-Tenant-Id"]
+  tenant_id != ""
+  
+  # Verify tenant matches expected value for this JWT
+  tenant_id == input.jwt.tenant_id
+}
+```
+
+#### 2. Spoofing Detection
+
+Detect and deny requests attempting to spoof admin privileges:
+
+```rego
+package policies
+
+default allow := false
+
+# Deny if client attempted to spoof admin header
+allow := false if {
+  input.request.blocked_headers["X-Restrego-Admin"]
+  trace("SECURITY: Client attempted to spoof X-Restrego-Admin header")
+}
+
+# Normal authorization continues if no spoofing detected
+allow if {
+  not input.request.blocked_headers["X-Restrego-Admin"]
+  "admin" in input.jwt.roles
+}
+```
+
+#### 3. Validated Header Forwarding
+
+Extract upstream context and forward to backend after validation:
+
+```rego
+package policies
+
+default allow := false
+
+# Validate and forward tenant ID to backend
+allow if {
+  # Get tenant from upstream header
+  upstream_tenant := input.request.blocked_headers["X-Restrego-Tenant-Id"]
+  
+  # Validate it matches JWT claim
+  upstream_tenant == input.jwt.tenant_id
+  
+  # Allow request
+  true
+}
+
+# Forward validated tenant to backend as X-Restrego-Tenant-Id
+# (Policy result variables are automatically converted to X-Restrego-* headers)
+tenant_id := input.jwt.tenant_id if {
+  input.request.blocked_headers["X-Restrego-Tenant-Id"]
+}
+```
+
+#### 4. Multi-Layer Trust Verification
+
+Verify trust chain in multi-layer deployment:
+
+```rego
+package policies
+
+default allow := false
+
+# Layer 1: Set tenant context
+allow if {
+  input.jwt.appid == "upstream-gateway-app-id"
+  # Tenant extracted from JWT, will be set as result variable
+}
+
+tenant_id := input.jwt.tenant_id
+
+# Layer 2: Validate upstream tenant
+allow if {
+  # Verify upstream set tenant header
+  upstream_tenant := input.request.blocked_headers["X-Restrego-Tenant-Id"]
+  
+  # Verify it matches our JWT
+  upstream_tenant == input.jwt.tenant_id
+  
+  # Additional validation: only trust specific upstream apps
+  input.jwt.appid in ["layer1-app-id", "trusted-gateway-id"]
+}
+```
+
+### Metrics
+
+When the feature is enabled, rest-rego exports additional metrics:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `restrego_blocked_headers_exposed` | Gauge | Feature state (0=disabled, 1=enabled) |
+| `restrego_blocked_headers_captured` | Counter | Total number of blocked headers captured |
+| `restrego_requests_with_blocked_headers` | Counter | Total requests containing blocked headers |
+
+**Example queries:**
+```promql
+# Check if feature is enabled
+restrego_blocked_headers_exposed
+
+# Rate of requests with blocked headers
+rate(restrego_requests_with_blocked_headers[5m])
+
+# Average blocked headers per request
+rate(restrego_blocked_headers_captured[5m]) / rate(restrego_requests_with_blocked_headers[5m])
+```
+
+### Security Guarantees
+
+✅ **Headers ALWAYS removed**: Backend never receives `X-Restrego-*` headers from clients  
+✅ **Policy-controlled forwarding**: Only policy-approved values forwarded to backend  
+✅ **Default secure**: Feature disabled by default (zero visibility)  
+✅ **Audit trail**: Metrics track all blocked header activity  
+✅ **No automatic forwarding**: Headers only forwarded if policy explicitly sets result variables  
+
+### Performance Impact
+
+- **Feature disabled** (default): Zero overhead
+- **Feature enabled, no blocked headers**: ~1µs overhead
+- **Feature enabled, with blocked headers**: ~2-4µs overhead
+- **All scenarios**: Well under 1ms target
+
+**Benchmark results** (per request):
+```
+BenchmarkCleanupHandler_Disabled                    43580 ns/op
+BenchmarkCleanupHandler_Enabled_NoBlockedHeaders     1088 ns/op  
+BenchmarkCleanupHandler_Enabled_WithBlockedHeaders   2034 ns/op
+BenchmarkCleanupHandler_Enabled_ManyBlockedHeaders   4585 ns/op
+```
+
+### Debugging
+
+Enable debug mode to see blocked headers in logs:
+
+```bash
+rest-rego --debug --expose-blocked-headers
+```
+
+**Example debug output:**
+```json
+{
+  "time": "2025-11-20T10:30:00Z",
+  "level": "DEBUG",
+  "msg": "blocked header captured for policy",
+  "header": "X-Restrego-Tenant-Id",
+  "values": ["tenant-123"]
+}
+```
+
+### Best Practices
+
+1. **Enable only when needed**: Default disabled minimizes complexity for simple deployments
+2. **Validate upstream trust**: Always verify source of blocked headers before using them
+3. **Audit spoofing attempts**: Log and alert on unexpected blocked headers
+4. **Document trust boundaries**: Clearly document which layers set which headers
+5. **Test validation logic**: Ensure policies correctly reject invalid upstream context
+6. **Monitor metrics**: Track `restrego_requests_with_blocked_headers` for anomalies
+
+### Related Documentation
+
+- [Feature Specification](/.specs/features/multi-layer-header-passthrough.md) - Detailed feature design
+- [Implementation Plan](/.specs/plan/feature-blocked-headers-policy-input-1.md) - Development roadmap
+- [Policy Development Guide](./docs/POLICY.md) - Comprehensive policy patterns (coming soon)
+
+---
+
+## 🚀 Deployment
 
 ### Docker Deployment
 

@@ -1,6 +1,6 @@
 ---
 description: 'AI-optimized implementation planning assistant for your project. Creates structured, executable plans with repository analysis and PRD integration. Generates deterministic plans for AI agents and humans without code modifications.'
-tools: ['search', 'usages', 'fetch', 'createFile', 'createDirectory']
+tools: ['edit/createFile', 'edit/createDirectory', 'edit/editFiles', 'search', 'usages', 'fetch']
 ---
 # Implementation Plan Generation Mode
 

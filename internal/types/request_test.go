@@ -1,7 +1,9 @@
 package types
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -681,4 +683,213 @@ func TestNewInfo_EdgeCases(t *testing.T) {
 			t.Error("Expected Headers map to be initialized, got nil")
 		}
 	})
+}
+
+func TestNewInfo_BlockedHeaders(t *testing.T) {
+	testCases := []struct {
+		name                   string
+		setupContext           func(*http.Request) *http.Request
+		expectedBlockedHeaders map[string]interface{}
+		expectNil              bool
+	}{
+		{
+			name: "No blocked headers in context",
+			setupContext: func(req *http.Request) *http.Request {
+				// Don't add anything to context
+				return req
+			},
+			expectedBlockedHeaders: nil,
+			expectNil:              true,
+		},
+		{
+			name: "Empty map in context",
+			setupContext: func(req *http.Request) *http.Request {
+				ctx := req.Context()
+				blocked := make(map[string]interface{})
+				return req.WithContext(context.WithValue(ctx, CtxBlockedHeadersKey, blocked))
+			},
+			expectedBlockedHeaders: nil,
+			expectNil:              true,
+		},
+		{
+			name: "Populated blocked headers in context - single values",
+			setupContext: func(req *http.Request) *http.Request {
+				ctx := req.Context()
+				blocked := map[string]interface{}{
+					"X-Restrego-User": "user123",
+					"X-Restrego-Role": "admin",
+				}
+				return req.WithContext(context.WithValue(ctx, CtxBlockedHeadersKey, blocked))
+			},
+			expectedBlockedHeaders: map[string]interface{}{
+				"X-Restrego-User": "user123",
+				"X-Restrego-Role": "admin",
+			},
+			expectNil: false,
+		},
+		{
+			name: "Populated blocked headers in context - mixed types",
+			setupContext: func(req *http.Request) *http.Request {
+				ctx := req.Context()
+				blocked := map[string]interface{}{
+					"X-Restrego-Single":   "value1",
+					"X-Restrego-Multiple": []string{"val1", "val2", "val3"},
+				}
+				return req.WithContext(context.WithValue(ctx, CtxBlockedHeadersKey, blocked))
+			},
+			expectedBlockedHeaders: map[string]interface{}{
+				"X-Restrego-Single":   "value1",
+				"X-Restrego-Multiple": []string{"val1", "val2", "val3"},
+			},
+			expectNil: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create base request
+			req := httptest.NewRequest("GET", "/api/test", nil)
+
+			// Setup context if needed
+			req = tc.setupContext(req)
+
+			// Call NewInfo
+			info := NewInfo(req, "Authorization")
+
+			// Verify blocked headers
+			if tc.expectNil {
+				if info.Request.BlockedHeaders != nil {
+					t.Errorf("Expected BlockedHeaders to be nil, got %+v", info.Request.BlockedHeaders)
+				}
+			} else {
+				if info.Request.BlockedHeaders == nil {
+					t.Error("Expected BlockedHeaders to be populated, got nil")
+				} else {
+					if !reflect.DeepEqual(info.Request.BlockedHeaders, tc.expectedBlockedHeaders) {
+						t.Errorf("BlockedHeaders mismatch:\nexpected: %+v\ngot:      %+v",
+							tc.expectedBlockedHeaders, info.Request.BlockedHeaders)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestRequestInfo_JSONMarshal_BlockedHeaders(t *testing.T) {
+	t.Run("JSON includes blocked_headers field when populated", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		ctx := req.Context()
+		blocked := map[string]interface{}{
+			"X-Restrego-Test": "value1",
+		}
+		req = req.WithContext(context.WithValue(ctx, CtxBlockedHeadersKey, blocked))
+
+		info := NewInfo(req, "Authorization")
+
+		// Marshal to JSON
+		data, err := json.Marshal(info.Request)
+		if err != nil {
+			t.Fatalf("Failed to marshal RequestInfo: %v", err)
+		}
+
+		jsonStr := string(data)
+
+		// Verify blocked_headers field is present
+		if !contains(jsonStr, "blocked_headers") {
+			t.Error("Expected JSON to contain 'blocked_headers' field")
+		}
+
+		// Verify the field contains our test data
+		if !contains(jsonStr, "X-Restrego-Test") {
+			t.Error("Expected JSON to contain 'X-Restrego-Test' in blocked_headers")
+		}
+	})
+
+	t.Run("JSON omits blocked_headers field when empty (omitempty)", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		// Don't add anything to context
+
+		info := NewInfo(req, "Authorization")
+
+		// Marshal to JSON
+		data, err := json.Marshal(info.Request)
+		if err != nil {
+			t.Fatalf("Failed to marshal RequestInfo: %v", err)
+		}
+
+		jsonStr := string(data)
+
+		// Verify blocked_headers field is NOT present (omitempty works)
+		if contains(jsonStr, "blocked_headers") {
+			t.Error("Expected JSON to NOT contain 'blocked_headers' field when empty")
+		}
+	})
+
+	t.Run("JSON structure with both single and multiple values", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/test", nil)
+		ctx := req.Context()
+		blocked := map[string]interface{}{
+			"X-Restrego-Single":   "single-value",
+			"X-Restrego-Multiple": []string{"val1", "val2"},
+		}
+		req = req.WithContext(context.WithValue(ctx, CtxBlockedHeadersKey, blocked))
+
+		info := NewInfo(req, "Authorization")
+
+		// Marshal to JSON
+		data, err := json.Marshal(info.Request)
+		if err != nil {
+			t.Fatalf("Failed to marshal RequestInfo: %v", err)
+		}
+
+		// Unmarshal back to verify structure
+		var result map[string]interface{}
+		if err := json.Unmarshal(data, &result); err != nil {
+			t.Fatalf("Failed to unmarshal JSON: %v", err)
+		}
+
+		// Verify blocked_headers exists
+		blockedHeadersRaw, exists := result["blocked_headers"]
+		if !exists {
+			t.Fatal("Expected 'blocked_headers' field in JSON")
+		}
+
+		blockedHeaders, ok := blockedHeadersRaw.(map[string]interface{})
+		if !ok {
+			t.Fatalf("Expected blocked_headers to be map[string]interface{}, got %T", blockedHeadersRaw)
+		}
+
+		// Verify single value
+		if single, ok := blockedHeaders["X-Restrego-Single"]; !ok {
+			t.Error("Expected X-Restrego-Single in blocked_headers")
+		} else if single != "single-value" {
+			t.Errorf("Expected X-Restrego-Single to be 'single-value', got %v", single)
+		}
+
+		// Verify multiple values
+		if multiple, ok := blockedHeaders["X-Restrego-Multiple"]; !ok {
+			t.Error("Expected X-Restrego-Multiple in blocked_headers")
+		} else {
+			multipleSlice, ok := multiple.([]interface{})
+			if !ok {
+				t.Errorf("Expected X-Restrego-Multiple to be []interface{}, got %T", multiple)
+			} else if len(multipleSlice) != 2 {
+				t.Errorf("Expected 2 values in X-Restrego-Multiple, got %d", len(multipleSlice))
+			}
+		}
+	})
+}
+
+// Helper function for string contains check
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

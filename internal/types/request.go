@@ -10,6 +10,7 @@ import (
 type ctxKey int
 
 const ctxInfoKey ctxKey = 0
+const CtxBlockedHeadersKey ctxKey = 1
 
 // Info is the request information
 type Info struct {
@@ -23,12 +24,13 @@ type Info struct {
 
 // RequestInfo is the request information for the rego-policy
 type RequestInfo struct {
-	Method  string                 `json:"method"`
-	Path    []string               `json:"path"`
-	Headers map[string]interface{} `json:"headers"`
-	Auth    *RequestAuth           `json:"auth"`
-	Size    int64                  `json:"size"`
-	ID      string                 `json:"id,omitempty"`
+	Method         string                 `json:"method"`
+	Path           []string               `json:"path"`
+	Headers        map[string]interface{} `json:"headers"`
+	BlockedHeaders map[string]interface{} `json:"blocked_headers,omitempty"`
+	Auth           *RequestAuth           `json:"auth"`
+	Size           int64                  `json:"size"`
+	ID             string                 `json:"id,omitempty"`
 }
 
 type RequestAuth struct {
@@ -42,6 +44,14 @@ type RequestAuth struct {
 // 	Header  interface{} `json:"header,omitempty"`
 // 	Payload interface{} `json:"payload,omitempty"`
 // }
+
+// GetBlockedHeaders retrieves blocked headers from the request context
+func GetBlockedHeaders(r *http.Request) map[string]interface{} {
+	if blocked, ok := r.Context().Value(CtxBlockedHeadersKey).(map[string]interface{}); ok {
+		return blocked
+	}
+	return nil
+}
 
 // NewInfo creates a new instance of the Info based on the request
 func NewInfo(r *http.Request, authKey string) *Info {
@@ -81,6 +91,11 @@ func NewInfo(r *http.Request, authKey string) *Info {
 			}
 		}
 		i.Request.Auth = a
+	}
+
+	// Retrieve blocked headers from request context if present
+	if blocked := GetBlockedHeaders(r); len(blocked) > 0 {
+		i.Request.BlockedHeaders = blocked
 	}
 
 	return i

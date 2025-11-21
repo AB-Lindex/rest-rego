@@ -46,5 +46,6 @@ tasks:
     env:
       WELLKNOWN_OIDC: https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration
       JWT_AUDIENCES: test
+      EXPOSE_BLOCKED_HEADERS: "true"
     cmds:
       - bin/restrego --debug --verbose

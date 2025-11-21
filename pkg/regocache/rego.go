@@ -13,6 +13,7 @@ import (
 	"github.com/AB-Lindex/rest-rego/pkg/filecache"
 
 	"github.com/open-policy-agent/opa/v1/rego"
+	"github.com/open-policy-agent/opa/v1/topdown/print"
 )
 
 var debug bool
@@ -105,6 +106,7 @@ func (r *RegoCache) GetRego(name string) (*rego.PreparedEvalQuery, error) {
 	q, err := rego.New(
 		rego.Query(question),
 		rego.Module(name, string(data)),
+		rego.EnablePrintStatements(debug),
 	).PrepareForEval(context.Background())
 	if err != nil {
 		slog.Error("rego: rego-prepare error", "error", err)
@@ -116,6 +118,11 @@ func (r *RegoCache) GetRego(name string) (*rego.PreparedEvalQuery, error) {
 	return query, nil
 }
 
+func (r *RegoCache) Print(ctx print.Context, msg string) error {
+	slog.Debug(fmt.Sprintf("REGO-output: %s", msg))
+	return nil
+}
+
 func (r *RegoCache) Validate(name string, input interface{}) (interface{}, error) {
 	query, err := r.GetRego(name)
 	if err != nil {
@@ -123,7 +130,7 @@ func (r *RegoCache) Validate(name string, input interface{}) (interface{}, error
 		return nil, err
 	}
 
-	rs, err := query.Eval(context.Background(), rego.EvalInput(input))
+	rs, err := query.Eval(context.Background(), rego.EvalInput(input), rego.EvalPrintHook(r))
 	if err != nil {
 		slog.Error("rego: eval error", "error", err)
 		return nil, err

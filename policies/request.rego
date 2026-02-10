@@ -23,5 +23,7 @@ url := path if {
 	path := "/user/--"
 }
 
-var3 := input.request.blocked_headers["X-Restrego-Var1"]
+var3 := input.request.blocked_headers["X-Restrego-Var1"] if {
+	allow
+}
 

@@ -4,10 +4,14 @@ on:
   release:
     types: [created]
 
+permissions: {} # Rely on job-level permissions only
+
 jobs:
   releases-matrix:
     name: Release Go Binary
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to upload release assets
     strategy:
       matrix:
         goos: [linux, windows, darwin]
@@ -32,6 +36,9 @@ jobs:
 
   docker-build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read  # Required to checkout repository
+      id-token: write  # Required for provenance signing (OIDC)
 
     steps:
     - name: Checkout
@@ -40,8 +47,9 @@ jobs:
     - name: Get Version
       run: bash ./tools/get_version.sh
 
-    - name: Docker meta
-      id: meta
+    - name: Docker meta (stable)
+      id: meta-stable
+      if: ${{ !github.event.release.prerelease }}
       uses: docker/metadata-action@v4
       with:
         images: |
@@ -49,6 +57,25 @@ jobs:
         tags: |
           type=semver,pattern=v{{version}}
           type=semver,pattern=v{{major}}.{{minor}}
+          type=semver,pattern=v{{major}}
+        labels: |
+          org.opencontainers.image.title=restrego
+          org.opencontainers.image.description=Protect your REST API with Rego policies
+          org.opencontainers.image.source=https://github.com/AB-Lindex/rest-rego
+          org.opencontainers.image.url=https://github.com/AB-Lindex/rest-rego
+          org.opencontainers.image.licenses=MIT
+
+    - name: Docker meta (prerelease)
+      id: meta-beta
+      if: ${{ github.event.release.prerelease }}
+      uses: docker/metadata-action@v4
+      with:
+        images: |
+          lindex/rest-rego-beta
+        tags: |
+          type=semver,pattern=v{{version}}-beta
+          type=semver,pattern=v{{major}}.{{minor}}-beta
+          type=semver,pattern=v{{major}}-beta
         labels: |
           org.opencontainers.image.title=restrego
           org.opencontainers.image.description=Protect your REST API with Rego policies
@@ -72,4 +99,5 @@ jobs:
         push: true
         sbom: true
         provenance: mode=max
-        tags: ${{ steps.meta.outputs.tags }}
+        tags: ${{ steps.meta-stable.outputs.tags || steps.meta-beta.outputs.tags }}
+        labels: ${{ steps.meta-stable.outputs.labels || steps.meta-beta.outputs.labels }}

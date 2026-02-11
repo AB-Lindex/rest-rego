@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -91,11 +92,17 @@ func (c *Cache) Watch() {
 				// log.Println("watcher-event:", event)
 				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
 					name := path.Base(event.Name)
+					if !c.shouldProcess(event.Name, name) {
+						continue
+					}
 					// log.Println("watcher-modified file:", event.Name, name)
 					c.invalidate(name, fsnotify.Write)
 				}
 				if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
 					name := path.Base(event.Name)
+					if !c.shouldProcess(event.Name, name) {
+						continue
+					}
 					// log.Println("watcher-removed file:", event.Name, name)
 					c.invalidate(name, fsnotify.Remove)
 				}
@@ -169,6 +176,29 @@ func (c *Cache) Get(name string) ([]byte, bool, error) {
 	}
 	c.files[name] = f
 	return f.data, updated, nil
+}
+
+func (c *Cache) shouldProcess(fullPath, name string) bool {
+	// Filter out Kubernetes ConfigMap internal paths
+	if strings.HasPrefix(name, ".") {
+		return false
+	}
+
+	// Check if it matches the pattern
+	match, err := path.Match(c.pattern, name)
+	if err != nil || !match {
+		return false
+	}
+
+	// Check if it's a regular file (not a directory or symlink to directory)
+	stat, err := os.Lstat(fullPath)
+	if err != nil {
+		// If stat fails, let the downstream code handle it
+		return true
+	}
+
+	// Only process regular files
+	return stat.Mode().IsRegular()
 }
 
 func (c *Cache) readFile(folder, name string) (*File, bool, error) {

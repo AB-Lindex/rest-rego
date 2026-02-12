@@ -27,11 +27,12 @@ The implementation is split into 7 small, independently testable phases that bui
 - **REQ-005**: Support mixed file and HTTP sources across different issuers in `WELLKNOWN_OIDC`
 - **REQ-006**: Reject source-type mismatch within a single issuer (file well-known → HTTP jwks_uri or vice versa)
 - **REQ-007**: Provide clear structured error messages for all file-loading failures
-- **SEC-001**: Validate and clean file paths to prevent path traversal
+- **REQ-008**: Support relative file paths resolved from the working directory
+- **SEC-001**: Validate and clean file paths to prevent path traversal; explicitly reject paths containing `..` components after normalization
 - **SEC-002**: Respect Unix file permissions; log permission errors clearly
 - **CON-001**: No breaking changes — all existing HTTP-based configurations must work identically
 - **CON-002**: File-based JWKS are loaded once at startup; no auto-refresh or file watching
-- **CON-003**: Only `internal/jwtsupport/jwt.go` and its test file need code changes; documentation files are updated separately
+- **CON-003**: Phase 1 utility functions go into a new `internal/jwtsupport/support.go`; Phases 2-5 modify `internal/jwtsupport/jwt.go`; documentation files are updated separately
 - **GUD-001**: Use `log/slog` structured logging consistently, matching existing patterns
 - **GUD-002**: Keep utility functions small, pure, and independently testable
 - **PAT-001**: Follow existing error-and-continue pattern in `LoadWellKnowns()` and `LoadJWKS()` loops
@@ -48,38 +49,44 @@ The implementation is split into 7 small, independently testable phases that bui
 
 ### Phase 1 — File URL utility functions
 
-- **GOAL-001**: Add pure utility functions for detecting and reading `file:` URLs, fully covered by unit tests.
+- **GOAL-001**: Add pure utility functions for detecting and reading `file:` URLs in a new `support.go` file, fully covered by unit tests.
 
-- **TASK-001**: Create `isFileURL(url string) bool` in `internal/jwtsupport/jwt.go` `[📋 Planned]`
-  - Files: `internal/jwtsupport/jwt.go`
+- **TASK-001**: Create `isFileURL(url string) bool` in `internal/jwtsupport/support.go` `[📋 Planned]`
+  - Files: `internal/jwtsupport/support.go` (new file)
   - Returns `true` when the string starts with `file:` (case-sensitive)
   - Returns `false` for empty strings, `https://`, `http://`, and other schemes
 
-- **TASK-002**: Create `fileURLToPath(fileURL string) (string, error)` in `internal/jwtsupport/jwt.go` `[📋 Planned]`
-  - Files: `internal/jwtsupport/jwt.go`
+- **TASK-002**: Create `fileURLToPath(fileURL string) (string, error)` in `internal/jwtsupport/support.go` `[📋 Planned]`
+  - Files: `internal/jwtsupport/support.go`
   - Uses `net/url.Parse()` to parse the URL and extract the path
   - Returns error for malformed URLs
-  - Uses `filepath.Clean()` on the resulting path
-  - Ensures the path is absolute (starts with `/`)
-  - Returns the cleaned absolute path
+  - Uses `filepath.Clean()` on the resulting path to normalize it
+  - **Path Traversal Prevention**: After cleaning, checks if the path contains `..` separator or starts with `..` — if so, returns error: `"path traversal not allowed"`
+  - Supports both absolute paths (e.g., `/config/jwks.json`) and relative paths (e.g., `config/jwks.json`, `./config/jwks.json`)
+  - If path is relative, it will be resolved relative to the working directory when passed to `os.ReadFile()`
+  - Returns the cleaned path (absolute or relative)
 
-- **TASK-003**: Create `readFileURL(fileURL string) ([]byte, error)` in `internal/jwtsupport/jwt.go` `[📋 Planned]`
-  - Files: `internal/jwtsupport/jwt.go`
+- **TASK-003**: Create `readFileURL(fileURL string) ([]byte, error)` in `internal/jwtsupport/support.go` `[📋 Planned]`
+  - Files: `internal/jwtsupport/support.go`
   - Calls `fileURLToPath()` then `os.ReadFile()`
   - Wraps errors with `fmt.Errorf` context including the original URL
   - Logs at `slog.Debug` level with the resolved path
   - Dependencies: TASK-002
 
-- **TASK-004**: Create `sourceType(url string) string` helper in `internal/jwtsupport/jwt.go` `[📋 Planned]`
-  - Files: `internal/jwtsupport/jwt.go`
+- **TASK-004**: Create `sourceType(url string) string` helper in `internal/jwtsupport/support.go` `[📋 Planned]`
+  - Files: `internal/jwtsupport/support.go`
   - Returns `"file"` if `isFileURL()` is true, otherwise `"http"`
   - Used for logging and error messages
 
-- **TASK-005**: Write unit tests for TASK-001 through TASK-004 in `internal/jwtsupport/jwt_test.go` `[📋 Planned]`
-  - Files: `internal/jwtsupport/jwt_test.go` (new file)
+- **TASK-005**: Write unit tests for TASK-001 through TASK-004 in `internal/jwtsupport/support_test.go` `[📋 Planned]`
+  - Files: `internal/jwtsupport/support_test.go` (new file)
   - `TestIsFileURL`: table-driven test with cases: `file:/path` → true, `file:///path` → true, `file://localhost/path` → true, `https://example.com` → false, `http://example.com` → false, `""` → false, `ftp://` → false
-  - `TestFileURLToPath`: table-driven test with cases: `file:///tmp/a.json` → `/tmp/a.json`, `file:/tmp/a.json` → `/tmp/a.json`, `file://localhost/tmp/a.json` → `/tmp/a.json`, malformed → error
-  - `TestReadFileURL`: create temp file with known content, read via `file:///` URL, assert content matches; also test non-existent file → error
+  - `TestFileURLToPath`: table-driven test with cases:
+    - Valid paths: `file:///tmp/a.json` → `/tmp/a.json`, `file:/tmp/a.json` → `/tmp/a.json`, `file://localhost/tmp/a.json` → `/tmp/a.json`
+    - Relative paths: `file:config/test.json` → `config/test.json`, `file:./config/test.json` → `config/test.json`
+    - Path traversal (should error): `file:../etc/passwd` → error, `file:config/../../etc/passwd` → error, `file:///config/../../../etc/passwd` → error
+    - Malformed → error
+  - `TestReadFileURL`: create temp file with known content, read via `file:///` URL, assert content matches; also test non-existent file → error; test relative path resolution
   - `TestSourceType`: `file:///x` → `"file"`, `https://x` → `"http"`
   - Estimated effort: 1-2 hours
 
@@ -97,7 +104,7 @@ The implementation is split into 7 small, independently testable phases that bui
   - Dependencies: TASK-001, TASK-003
 
 - **TASK-007**: Write unit tests for file-based `LoadWellKnowns()` `[📋 Planned]`
-  - Files: `internal/jwtsupport/jwt_test.go`
+  - Files: `internal/jwtsupport/jwt_test.go` (new file)
   - Create a temp `well-known.json` file with valid JSON containing `jwks_uri` and `id_token_signing_alg_values_supported`
   - Construct a `JWTSupport` with `wellKnowns: []string{"file:///tmp/.../well-known.json"}`
   - Call `LoadWellKnowns()` and assert `wellknownList` has 1 entry with correct `JwksURI`
@@ -121,6 +128,7 @@ The implementation is split into 7 small, independently testable phases that bui
 
 - **TASK-009**: Write unit tests for file-based `LoadJWKS()` `[📋 Planned]`
   - Files: `internal/jwtsupport/jwt_test.go`
+  - Note: tests for `LoadJWKS()` and `LoadWellKnowns()` go in `jwt_test.go`, separate from the support utility tests in `support_test.go`
   - Create temp JWKS file (use the structure from `temp/duende/jwks.json` as reference)
   - Set up `JWTSupport` with a `wellknownList` entry whose `JwksURI` is a `file:///` URL
   - Call `LoadJWKS()` and assert `j.JWKS` has 1 entry with correct key count
@@ -169,6 +177,7 @@ The implementation is split into 7 small, independently testable phases that bui
 
 - **TASK-014**: Write integration-style unit test for `Authenticate()` with file-based keys `[📋 Planned]`
   - Files: `internal/jwtsupport/jwt_test.go`
+  - Note: this test file is shared with Phase 2 and Phase 3 tests
   - Generate an RSA key pair in-test using `crypto/rsa` and `crypto/rand`
   - Create a JWKS file containing the public key
   - Create a well-known file pointing to the JWKS file
@@ -245,23 +254,25 @@ The implementation is split into 7 small, independently testable phases that bui
 
 ## 5. Files
 
-- **FILE-001**: `internal/jwtsupport/jwt.go` — Main implementation: add utility functions, modify `LoadWellKnowns()`, `LoadJWKS()`, and `Authenticate()`
-- **FILE-002**: `internal/jwtsupport/jwt_test.go` — New file: unit tests for all new and modified functionality
-- **FILE-003**: `docs/JWT.md` — Add "File-Based JWKS Loading" documentation section
-- **FILE-004**: `docs/CONFIGURATION.md` — Update `WELLKNOWN_OIDC` documentation with `file:` URL support
-- **FILE-005**: `README.md` — Update features table and quick start section
-- **FILE-006**: `examples/kubernetes/file-based-jwks/configmap-jwks.yaml` — New: Kubernetes ConfigMap example
-- **FILE-007**: `examples/kubernetes/file-based-jwks/deployment.yaml` — New: Kubernetes Deployment example
-- **FILE-008**: `examples/kubernetes/file-based-jwks/README.md` — New: Step-by-step guide
-- **FILE-009**: `temp/file-jwks/well-known.json` — New: test fixture well-known
-- **FILE-010**: `temp/file-jwks/jwks.json` — New: test fixture JWKS
-- **FILE-011**: `tests/file-jwks.http` — New: manual test file
+- **FILE-001**: `internal/jwtsupport/support.go` — New file: pure utility functions (`isFileURL`, `fileURLToPath`, `readFileURL`, `sourceType`)
+- **FILE-002**: `internal/jwtsupport/support_test.go` — New file: unit tests for utility functions
+- **FILE-003**: `internal/jwtsupport/jwt.go` — Modified: `LoadWellKnowns()`, `LoadJWKS()`, and `Authenticate()` with file-based branches
+- **FILE-004**: `internal/jwtsupport/jwt_test.go` — New file: unit tests for modified loading and authentication functions
+- **FILE-005**: `docs/JWT.md` — Add "File-Based JWKS Loading" documentation section
+- **FILE-006**: `docs/CONFIGURATION.md` — Update `WELLKNOWN_OIDC` documentation with `file:` URL support
+- **FILE-007**: `README.md` — Update features table and quick start section
+- **FILE-008**: `examples/kubernetes/file-based-jwks/configmap-jwks.yaml` — New: Kubernetes ConfigMap example
+- **FILE-009**: `examples/kubernetes/file-based-jwks/deployment.yaml` — New: Kubernetes Deployment example
+- **FILE-010**: `examples/kubernetes/file-based-jwks/README.md` — New: Step-by-step guide
+- **FILE-011**: `temp/file-jwks/well-known.json` — New: test fixture well-known
+- **FILE-012**: `temp/file-jwks/jwks.json` — New: test fixture JWKS
+- **FILE-013**: `tests/file-jwks.http` — New: manual test file
 
 ## 6. Testing
 
 - **TEST-001**: `TestIsFileURL` — Table-driven: various URL schemes → correct boolean (Phase 1)
-- **TEST-002**: `TestFileURLToPath` — Table-driven: file URL formats → correct path or error (Phase 1)
-- **TEST-003**: `TestReadFileURL` — Temp file round-trip read; non-existent file error (Phase 1)
+- **TEST-002**: `TestFileURLToPath` — Table-driven: file URL formats → correct path or error; includes path traversal attack tests with `..` notation (Phase 1)
+- **TEST-003**: `TestReadFileURL` — Temp file round-trip read; non-existent file error; relative path resolution (Phase 1)
 - **TEST-004**: `TestSourceType` — Verify string output for file vs HTTP URLs (Phase 1)
 - **TEST-005**: `TestLoadWellKnowns_File` — Valid/invalid/missing well-known files (Phase 2)
 - **TEST-006**: `TestLoadJWKS_File` — Valid/invalid JWKS files, PostFetch algorithm enrichment (Phase 3)
@@ -275,9 +286,11 @@ The implementation is split into 7 small, independently testable phases that bui
 - **RISK-001**: The `Authenticate()` refactor (TASK-013) touches the hot path for all requests. Mitigation: the change replaces `j.cache.Get()` with `j.JWKS[i]` which is already a `CachedSet` for HTTP sources, so behavior is identical. Verify with existing tests.
 - **RISK-002**: `jwk.Parse([]byte)` may behave slightly differently than keys fetched via `jwk.Cache`. Mitigation: use the same `PostFetch()` processing and validate in TEST-006 and TEST-008.
 - **RISK-003**: Index correspondence between `wellknownList[i]` and `JWKS[i]` could drift if an entry is skipped (e.g., source mismatch). Mitigation: when an entry is skipped in `LoadJWKS()`, also remove it from `wellknownList` or use a map-based lookup. Review during TASK-008 and TASK-011 implementation.
+- **RISK-004**: Path traversal attacks using `..` notation could expose sensitive system files. Mitigation: explicitly validate and reject paths containing `..` after normalization with `filepath.Clean()`, even though config is deployment-controlled.
 - **ASSUMPTION-001**: File-based JWKS files are small (<100KB) and can be read fully into memory at startup without concern.
 - **ASSUMPTION-002**: The `file:` URL scheme is universally understood by operators configuring the system.
 - **ASSUMPTION-003**: Windows support is not required immediately; the `file:` URL path handling focuses on Unix-style paths.
+- **ASSUMPTION-004**: Relative paths are resolved from the working directory where rest-rego is started, which is typically the application root in containerized deployments.
 
 ## 8. Related Specifications / Further Reading
 

@@ -31,6 +31,7 @@ rest-rego acts as a reverse proxy with policy-based access control, supporting b
 | **Sidecar Deployment**  | Deploy alongside your service (policy-with-code pattern)     |
 | **Hot Reload**          | Update policies without service restart (<1s)                |
 | **Multi-Auth**          | JWT (OIDC) or Azure Graph authentication methods             |
+| **File-Based JWKS**     | Load JWKS from local files for testing and air-gapped deployments |
 | **Version Control**     | Policies in Git alongside application code                   |
 | **Production Ready**    | Metrics, health checks, graceful shutdown, high availability |
 
@@ -133,6 +134,20 @@ docker run -p 8181:8181 -p 8182:8182 \
   -v $(pwd)/policies:/policies \
   lindex/rest-rego:latest
 ```
+
+**Local Development / Testing (File-Based JWKS):**
+```bash
+# Load JWKS from local files - perfect for CI/CD and offline testing
+docker run -p 8181:8181 -p 8182:8182 \
+  -e WELLKNOWN_OIDC="file:///config/well-known.json" \
+  -e JWT_AUDIENCES="test-audience" \
+  -e BACKEND_PORT="8080" \
+  -v $(pwd)/policies:/policies \
+  -v $(pwd)/test-config:/config \
+  lindex/rest-rego:latest
+```
+
+> **📖 Learn more:** [File-Based JWKS Documentation](./docs/FILE-BASED-JWKS.md) - Complete guide with key generation, configuration examples, and troubleshooting.
 
 ### 5. Test Authorization
 

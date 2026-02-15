@@ -1,0 +1,89 @@
+---
+# ConfigMap containing file-based JWKS and OIDC well-known configuration
+# This example uses a test RSA key pair for demonstration purposes
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: file-based-jwks
+  namespace: demo
+data:
+  # OIDC well-known configuration
+  # The jwks_uri points to a file:// URL that will be mounted in the container
+  well-known.json: |
+    {
+      "issuer": "https://example.com",
+      "jwks_uri": "file:///config/jwks/jwks.json",
+      "authorization_endpoint": "https://example.com/oauth2/authorize",
+      "token_endpoint": "https://example.com/oauth2/token",
+      "userinfo_endpoint": "https://example.com/oauth2/userinfo",
+      "id_token_signing_alg_values_supported": [
+        "RS256"
+      ],
+      "response_types_supported": [
+        "code",
+        "token",
+        "id_token"
+      ],
+      "subject_types_supported": [
+        "public"
+      ],
+      "claims_supported": [
+        "sub",
+        "aud",
+        "iss",
+        "exp",
+        "iat",
+        "name",
+        "email"
+      ]
+    }
+
+  # JSON Web Key Set (JWKS) containing the public key(s)
+  # This is a sample RSA public key for testing purposes
+  # Replace with your own key generated using the instructions in README.md
+  jwks.json: |
+    {
+      "keys": [
+        {
+          "kty": "RSA",
+          "use": "sig",
+          "kid": "test-key-2026",
+          "e": "AQAB",
+          "n": "v3m2wZo5FMPJKb6q-f4Kql4f07GrR88yG7g76eTKSENIJ5xfAX_gj2GlxFgjQKyYK4YNWiT7Oge2Ym8fTt7Ljn-MQjHLFsvwnBPgk8iff5Up1R0tQBP2ABG5lWGG_pL4PW_agBtrgv8_xcxG95jbgO7cqmgMg5httyKSbJzWpPUNi8ZKfffwy24FOPwQnMp0qp96xmWYnRCyVFvz_xzllRvAZL4ohPJU-UHbsJeCbjHrOxjDWTfeJoCj8M3dFMFgzisjU6rFLeoLkMLyKPy9R_dN3Sd57ittONqt8Y65bLC4d4YX-l14FGGjppUiOXoGnm08M5yJpfzLQC0dkqIKeQ",
+          "alg": "RS256"
+        }
+      ]
+    }
+
+---
+# ConfigMap containing the Rego policy
+# This is a simple allow-all policy for testing file-based JWKS
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: file-based-policies
+  namespace: demo
+data:
+  request.rego: |
+    package policies
+
+    # Deny by default
+    default allow := false
+
+    # Allow all requests with valid JWT signatures
+    # This validates that the JWT was signed by the key in the JWKS
+    allow if {
+      # Check that JWT exists and has required claims
+      input.jwt.iss
+      input.jwt.sub
+      input.jwt.exp
+    }
+
+    # Allow public health check endpoints without authentication
+    allow if {
+      input.request.path[0] == "health"
+    }
+
+    allow if {
+      input.request.path[0] == "ready"
+    }

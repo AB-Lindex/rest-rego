@@ -104,7 +104,7 @@ rest-rego supports two mutually exclusive authentication modes:
 
 | Option | Env Variable | Default | Description |
 |--------|--------------|---------|-------------|
-| `-w, --well-known` | `WELLKNOWN_OIDC` | - | OIDC well-known URL(s) for JWT verification |
+| `-w, --well-known` | `WELLKNOWN_OIDC` | - | OIDC well-known configuration URL. Supports `https://`, `http://`, and `file://` URLs |
 | `-u, --audience` | `JWT_AUDIENCES` | - | Expected JWT audience value(s) **(required)** |
 | `--audience-key` | `JWT_AUDIENCE_KEY` | `aud` | JWT claim key for audience validation |
 | `-a, --auth-header` | `AUTH_HEADER` | `Authorization` | HTTP header for authentication token |
@@ -144,6 +144,21 @@ rest-rego \
   -w https://provider2.com/.well-known/openid-configuration \
   -u audience1,audience2
 ```
+
+#### File-Based JWKS (Testing / Air-Gapped)
+
+```bash
+# Load JWKS from local files
+export WELLKNOWN_OIDC="file:///config/well-known.json"
+export JWT_AUDIENCES="your-test-audience"
+rest-rego
+
+# Relative paths also supported
+export WELLKNOWN_OIDC="file:config/well-known.json"
+rest-rego
+```
+
+**Note**: File-based sources must have matching source types—if the well-known configuration is loaded from a file, the `jwks_uri` inside it must also use a `file://` URL (both file or both HTTP). See [FILE-BASED-JWKS.md](FILE-BASED-JWKS.md) for complete documentation.
 
 ### Azure Graph Authentication
 

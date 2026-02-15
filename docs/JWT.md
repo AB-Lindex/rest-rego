@@ -32,6 +32,8 @@ WELLKNOWN_OIDC=https://your-idp.example.com/.well-known/openid-configuration
 JWT_AUDIENCES=api://your-app-id,api://another-app-id
 ```
 
+**Testing and Offline Scenarios:** For local development, integration testing, or air-gapped deployments, rest-rego also supports loading JWKS from local files instead of HTTP endpoints. This enables testing without external identity providers and faster CI/CD pipelines. See [FILE-BASED-JWKS.md](FILE-BASED-JWKS.md) for details.
+
 ## Azure (Microsoft Entra ID)
 
 ### Setup

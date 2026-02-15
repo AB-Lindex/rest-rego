@@ -2,6 +2,7 @@ package jwtsupport
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -40,6 +41,8 @@ func getAlgorithm(name string) jwa.KeyAlgorithm {
 type wellKnownData struct {
 	JwksURI             string   `json:"jwks_uri"`
 	SupportedAlgorithms []string `json:"id_token_signing_alg_values_supported"`
+	sourceURL           string   // original well-known URL used to load this data
+	isLocalFile         bool     // true if loaded from file: URL, false if from HTTP(S)
 }
 
 // PostFetch is a function that is called after the JWKS is fetched from the
@@ -104,24 +107,48 @@ func (j *JWTSupport) LoadWellKnowns() {
 			continue
 		}
 		slog.Debug("jwtsupport: loading well-known", "url", wellKnown)
-		helper := resthelp.New()
-		req, err := helper.Get(wellKnown)
-		if err != nil {
-			slog.Error("jwtsupport: failed to init well-known", "url", wellKnown, "error", err)
-			continue
-		}
-
-		resp, err := req.Do()
-		if err != nil {
-			slog.Error("jwtsupport: failed to get well-known", "url", wellKnown, "error", err)
-			continue
-		}
 
 		var wc wellKnownData
-		if err = resp.ParseJSON(&wc); err != nil {
-			slog.Error("jwtsupport: failed to parse well-known", "url", wellKnown, "error", err)
-			continue
+
+		if isFileURL(wellKnown) {
+			// Load well-known from file
+			data, err := readFileURL(wellKnown)
+			if err != nil {
+				slog.Error("jwtsupport: failed to read well-known file", "url", wellKnown, "error", err)
+				continue
+			}
+
+			if err := json.Unmarshal(data, &wc); err != nil {
+				slog.Error("jwtsupport: failed to parse well-known file", "url", wellKnown, "error", err)
+				continue
+			}
+
+			wc.isLocalFile = true
+			slog.Info("jwtsupport: loaded well-known from file", "url", wellKnown)
+		} else {
+			// Load well-known from HTTP(S)
+			helper := resthelp.New()
+			req, err := helper.Get(wellKnown)
+			if err != nil {
+				slog.Error("jwtsupport: failed to init well-known", "url", wellKnown, "error", err)
+				continue
+			}
+
+			resp, err := req.Do()
+			if err != nil {
+				slog.Error("jwtsupport: failed to get well-known", "url", wellKnown, "error", err)
+				continue
+			}
+
+			if err = resp.ParseJSON(&wc); err != nil {
+				slog.Error("jwtsupport: failed to parse well-known", "url", wellKnown, "error", err)
+				continue
+			}
+			wc.isLocalFile = false
 		}
+
+		// Record the source URL for this well-known data
+		wc.sourceURL = wellKnown
 		j.wellknownList = append(j.wellknownList, &wc)
 	}
 }
@@ -134,20 +161,57 @@ func (j *JWTSupport) LoadJWKS() {
 	)
 
 	for _, wk := range j.wellknownList {
-		err := j.cache.Register(wk.JwksURI, jwk.WithPostFetcher(wk)) //, jwk.WithPostFetcher(postfetch))
-		if err != nil {
-			slog.Error("jwtsupport: failed to register jwks", "url", wk.JwksURI, "error", err)
+		// Validate source-type consistency: well-known and jwks_uri must use matching source types
+		if isFileURL(wk.sourceURL) != isFileURL(wk.JwksURI) {
+			slog.Error("jwtsupport: source type mismatch",
+				"well-known", wk.sourceURL,
+				"well-known-type", sourceType(wk.sourceURL),
+				"jwks-uri", wk.JwksURI,
+				"jwks-type", sourceType(wk.JwksURI),
+				"error", "well-known and jwks_uri must use matching source types (both file or both http)")
 			continue
 		}
 
-		_, err = j.cache.Get(context.Background(), wk.JwksURI)
-		if err != nil {
-			slog.Error("jwtsupport: failed to get jwks", "url", wk.JwksURI, "error", err)
-			continue
+		if isFileURL(wk.JwksURI) {
+			// Load JWKS from file
+			data, err := readFileURL(wk.JwksURI)
+			if err != nil {
+				slog.Error("jwtsupport: failed to read jwks file", "url", wk.JwksURI, "error", err)
+				continue
+			}
+
+			set, err := jwk.Parse(data)
+			if err != nil {
+				slog.Error("jwtsupport: failed to parse jwks file", "url", wk.JwksURI, "error", err)
+				continue
+			}
+
+			// Apply PostFetch to enrich keys with algorithms if needed
+			set, err = wk.PostFetch(wk.JwksURI, set)
+			if err != nil {
+				slog.Error("jwtsupport: failed to post-process jwks", "url", wk.JwksURI, "error", err)
+				continue
+			}
+
+			slog.Info("jwtsupport: loaded jwks from file", "url", wk.JwksURI, "keys", set.Len())
+			j.JWKS = append(j.JWKS, set)
+		} else {
+			// Load JWKS from HTTP(S)
+			err := j.cache.Register(wk.JwksURI, jwk.WithPostFetcher(wk)) //, jwk.WithPostFetcher(postfetch))
+			if err != nil {
+				slog.Error("jwtsupport: failed to register jwks", "url", wk.JwksURI, "error", err)
+				continue
+			}
+
+			_, err = j.cache.Get(context.Background(), wk.JwksURI)
+			if err != nil {
+				slog.Error("jwtsupport: failed to get jwks", "url", wk.JwksURI, "error", err)
+				continue
+			}
+			cachedset := jwk.NewCachedSet(j.cache, wk.JwksURI)
+			slog.Info("jwtsupport: loaded jwks", "url", wk.JwksURI, "keys", cachedset.Len())
+			j.JWKS = append(j.JWKS, cachedset)
 		}
-		cachedset := jwk.NewCachedSet(j.cache, wk.JwksURI)
-		slog.Info("jwtsupport: loaded jwks", "url", wk.JwksURI, "keys", cachedset.Len())
-		j.JWKS = append(j.JWKS, cachedset)
 	}
 }
 
@@ -176,12 +240,21 @@ func (j *JWTSupport) Authenticate(info *types.Info, r *http.Request) error {
 	lastError := error(nil)
 
 	// Try to validate token against all configured issuers
-	for _, wc := range j.wellknownList {
-		ks, err := j.cache.Get(context.Background(), wc.JwksURI)
-		if err != nil {
-			slog.Warn("jwtsupport: failed to fetch JWKS", "url", wc.JwksURI, "error", err)
-			lastError = err
-			continue
+	for i, wc := range j.wellknownList {
+		var ks jwk.Set
+		var err error
+
+		if wc.isLocalFile {
+			// Use static JWKS loaded from file at startup
+			ks = j.JWKS[i]
+		} else {
+			// Fetch fresh JWKS from cache (with automatic refresh)
+			ks, err = j.cache.Get(context.Background(), wc.JwksURI)
+			if err != nil {
+				slog.Warn("jwtsupport: failed to fetch JWKS", "url", wc.JwksURI, "error", err)
+				lastError = err
+				continue
+			}
 		}
 
 		for _, aud := range j.audiences {

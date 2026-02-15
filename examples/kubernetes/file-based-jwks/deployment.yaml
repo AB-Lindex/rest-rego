@@ -1,0 +1,102 @@
+---
+# Deployment example using file-based JWKS authentication
+# This demonstrates how to mount JWKS from a ConfigMap and configure rest-rego to use it
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-file-jwks
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: demo-file-jwks
+  template:
+    metadata:
+      labels:
+        k8s-app: demo-file-jwks
+    spec:
+      containers:
+        # Main application container
+        - name: main
+          image: ninlil/http-https-echo
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 10000
+              name: backend
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 10000
+            initialDelaySeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 10000
+
+        # rest-rego sidecar with file-based JWKS
+        - name: sidecar
+          image: lindex/rest-rego
+          imagePullPolicy: IfNotPresent
+          env:
+            # Backend service configuration
+            - name: BACKEND_PORT
+              value: '10000'
+            
+            # File-based OIDC well-known configuration
+            # Points to the mounted well-known.json file
+            - name: WELLKNOWN_OIDC
+              value: 'file:///config/jwks/well-known.json'
+            
+            # JWT audience validation
+            - name: JWT_AUDIENCES
+              value: 'https://example.com'
+            
+            # Optional: Enable debug logging to see file loading
+            - name: LOG_LEVEL
+              value: 'debug'
+          
+          ports:
+            - containerPort: 8181
+              name: http
+          
+          # Health checks for the rest-rego sidecar
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8182
+            initialDelaySeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8182
+          
+          volumeMounts:
+            # Mount the Rego policies
+            - name: policies
+              mountPath: /policies
+              readOnly: true
+            
+            # Mount the JWKS configuration files
+            - name: jwks-config
+              mountPath: /config/jwks
+              readOnly: true
+
+      serviceAccount: demo
+      serviceAccountName: demo
+
+      volumes:
+        # Rego policy ConfigMap
+        - name: policies
+          configMap:
+            name: file-based-policies
+        
+        # JWKS configuration ConfigMap
+        - name: jwks-config
+          configMap:
+            name: file-based-jwks
+            items:
+              - key: well-known.json
+                path: well-known.json
+              - key: jwks.json
+                path: jwks.json

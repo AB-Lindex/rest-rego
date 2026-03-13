@@ -11,12 +11,17 @@ import (
 	"sync"
 
 	"github.com/AB-Lindex/rest-rego/pkg/filecache"
+	"github.com/ninlil/envsubst"
 
 	"github.com/open-policy-agent/opa/v1/rego"
 	"github.com/open-policy-agent/opa/v1/topdown/print"
 )
 
 var debug bool
+
+func init() {
+	envsubst.SetWrapper('{')
+}
 
 type RegoCache struct {
 	cache *filecache.Cache
@@ -87,8 +92,14 @@ func (r *RegoCache) GetRego(name string) (*rego.PreparedEvalQuery, error) {
 		return query, nil
 	}
 
+	expanded, err := envsubst.ConvertBytes(data, envsubst.Getenv)
+	if err != nil {
+		slog.Error("rego: env expansion failed", "file", name, "error", err)
+		return nil, err
+	}
+
 	var pkg string
-	for line := range bytes.Lines(data) {
+	for line := range bytes.Lines(expanded) {
 		if bytes.HasPrefix(line, []byte("package ")) {
 			pkg = string(bytes.TrimSpace(bytes.TrimPrefix(line, []byte("package "))))
 			break
@@ -105,7 +116,7 @@ func (r *RegoCache) GetRego(name string) (*rego.PreparedEvalQuery, error) {
 
 	q, err := rego.New(
 		rego.Query(question),
-		rego.Module(name, string(data)),
+		rego.Module(name, string(expanded)),
 		rego.EnablePrintStatements(debug),
 	).PrepareForEval(context.Background())
 	if err != nil {

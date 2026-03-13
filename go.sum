@@ -95,6 +95,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/ninlil/butler v0.8.3 h1:sX9AA211mfdFLzNEFzWwwlcUc6qO2KyNMmJuPW3KqKE=
 github.com/ninlil/butler v0.8.3/go.mod h1:gXyLADxAd6QEyr1DMlMBz7f/iQaX0R90DUMKWYUl/xw=
+github.com/ninlil/envsubst v0.2.0 h1:XtLsTM1S1EuFDtJGygkWwCcABYWyjxT4/wlC6yzePTg=
+github.com/ninlil/envsubst v0.2.0/go.mod h1:TMabrTFwF/OE8Ule5p73ULSsL/Bfqc7vMlKsVfZcvHk=
 github.com/open-policy-agent/opa v1.13.1 h1:2odxAcL3L0GNTlsuDcoguxViGxQxlpGL6zR8jdJjID8=
 github.com/open-policy-agent/opa v1.13.1/go.mod h1:M3Asy9yp1YTusUU5VQuENDe92GLmamIuceqjw+C8PHY=
 github.com/patrickmn/go-cache v2.1.0+incompatible h1:HRMgzkcYKYpi3C8ajMPV8OFXaaRUnok+kx1WdO15EQc=

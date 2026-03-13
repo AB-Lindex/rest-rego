@@ -34,7 +34,7 @@ func TestEnvExpansion_matchingValue(t *testing.T) {
 default allow := false
 
 allow if {
-	input.token == "${TEST_REGO_SECRET}"
+	input.token == "$(TEST_REGO_SECRET)"
 }
 `)
 	rc := newTestCache(t, tmpDir, policyFile)
@@ -62,7 +62,7 @@ func TestEnvExpansion_wrongValue(t *testing.T) {
 default allow := false
 
 allow if {
-	input.token == "${TEST_REGO_SECRET}"
+	input.token == "$(TEST_REGO_SECRET)"
 }
 `)
 	rc := newTestCache(t, tmpDir, policyFile)
@@ -90,7 +90,7 @@ func TestEnvExpansion_missingVarExpandsToEmpty(t *testing.T) {
 default allow := false
 
 allow if {
-	input.token == "${TEST_REGO_NONEXISTENT_XYZ}"
+	input.token == "$(TEST_REGO_NONEXISTENT_XYZ)"
 }
 `)
 	rc := newTestCache(t, tmpDir, policyFile)
@@ -120,8 +120,8 @@ func TestEnvExpansion_multipleVars(t *testing.T) {
 default allow := false
 
 allow if {
-	input.user == "${TEST_REGO_USER}"
-	input.role == "${TEST_REGO_ROLE}"
+	input.user == "$(TEST_REGO_USER)"
+	input.role == "$(TEST_REGO_ROLE)"
 }
 `)
 	rc := newTestCache(t, tmpDir, policyFile)

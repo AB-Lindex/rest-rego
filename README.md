@@ -18,6 +18,7 @@ rest-rego acts as a reverse proxy with policy-based access control, supporting b
 - ✅ **High performance** - <5ms latency, 5000+ req/s per instance
 - ✅ **Flexible authentication** - JWT (OIDC) or Azure Graph validation
 - ✅ **Zero code changes** - Deploy as sidecar, your app stays the same
+- ✅ **Secret injection** - Reference environment variables in policies via `$(VAR_NAME)` for secure secret management
 - ✅ **Production-grade** - Prometheus metrics, health checks, structured logging
 
 **Read more:** [WHY.md](./WHY.md) - Detailed comparison with DIY auth and API gateways
@@ -32,6 +33,7 @@ rest-rego acts as a reverse proxy with policy-based access control, supporting b
 | **Hot Reload**          | Update policies without service restart (<1s)                |
 | **Multi-Auth**          | JWT (OIDC) or Azure Graph authentication methods             |
 | **File-Based JWKS**     | Load JWKS from local files for testing and air-gapped deployments |
+| **Env Var Expansion**   | Inject secrets into policies at load time via `$(VAR_NAME)` syntax |
 | **Version Control**     | Policies in Git alongside application code                   |
 | **Production Ready**    | Metrics, health checks, graceful shutdown, high availability |
 
@@ -240,6 +242,19 @@ allow if {
 }
 ```
 
+### Secret Injection via Environment Variables
+
+Avoid hardcoding secrets in policy files. Use `$(VAR_NAME)` placeholders — expanded from environment variables at policy load time and on every hot-reload. Store secrets in Kubernetes Secrets and inject them via `env` or `envFrom` in the sidecar container.
+
+```rego
+allowed_apps := {
+  "$(ALLOWED_APP_ID_1)",
+  "$(ALLOWED_APP_ID_2)",
+}
+```
+
+**Learn more:** [Environment Variable Expansion](./docs/ENV-VARS.md) - Syntax, Kubernetes Secret integration, security considerations, troubleshooting
+
 ### Policy Input Structure
 
 Policies receive structured request data and authentication context:
@@ -417,6 +432,7 @@ containers:
 | Guide                                              | Description                              |
 |----------------------------------------------------|------------------------------------------|
 | [Policy Development](./docs/POLICY.md)             | Writing, testing, and deploying policies |
+| [Environment Variables](./docs/ENV-VARS.md)         | Inject secrets into policies at load time |
 | [Configuration Reference](./docs/CONFIGURATION.md) | Complete configuration options           |
 | [Deployment Guide](./docs/DEPLOYMENT.md)           | Docker, Kubernetes, scaling, security    |
 | [Observability](./docs/OBSERVABILITY.md)           | Metrics, logging, alerting, dashboards   |

@@ -19,10 +19,6 @@ import (
 
 var debug bool
 
-func init() {
-	envsubst.SetWrapper('{')
-}
-
 type RegoCache struct {
 	cache *filecache.Cache
 	regos map[string]*rego.PreparedEvalQuery

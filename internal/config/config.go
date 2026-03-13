@@ -8,6 +8,7 @@ import (
 
 	"github.com/AB-Lindex/rest-rego/internal/types"
 	"github.com/alexflint/go-arg"
+	"github.com/ninlil/envsubst"
 )
 
 // Fields is the configuration structure
@@ -30,6 +31,8 @@ type Fields struct {
 	AudienceKey          string   `arg:"--audience-key,env:JWT_AUDIENCE_KEY" default:"aud" help:"claim key to use for audience check" placeholder:"KEY"`
 	PermissiveAuth       bool     `arg:"--permissive-auth,env:PERMISSIVE_AUTH" default:"false" help:"allow invalid tokens to be treated as anonymous (default: false, strict mode)"`
 	ExposeBlockedHeaders bool     `arg:"--expose-blocked-headers,env:EXPOSE_BLOCKED_HEADERS" default:"false" help:"expose X-Restrego-* headers to policy as blocked_headers (security: headers still removed from backend)"`
+	EnvsubstPrefix       string   `arg:"--envsubst-prefix,env:ENVSUBST_PREFIX" default:"$" help:"prefix character for env var expansion in policies (one of: $ % & #)" placeholder:"CHAR"`
+	EnvsubstWrapper      string   `arg:"--envsubst-wrapper,env:ENVSUBST_WRAPPER" default:"{" help:"wrapper character for env var expansion in policies (one of: { ( [ <)" placeholder:"CHAR"`
 
 	// Timeout configuration for proxy server
 	ReadHeaderTimeout time.Duration `arg:"--read-header-timeout,env:READ_HEADER_TIMEOUT" default:"10s" help:"timeout for reading request headers"`
@@ -46,6 +49,24 @@ type Fields struct {
 func (f *Fields) Version() string {
 	return types.Version()
 }
+
+// validateEnvsubst validates the envsubst prefix and wrapper characters.
+func (f *Fields) validateEnvsubst() {
+	if !envsubst.SetPrefix(f.EnvsubstPrefixRune()) {
+		slog.Error("config: invalid envsubst-prefix", "value", f.EnvsubstPrefix, "valid", "$ % & #")
+		os.Exit(1)
+	}
+	if !envsubst.SetWrapper(f.EnvsubstWrapperRune()) {
+		slog.Error("config: invalid envsubst-wrapper", "value", f.EnvsubstWrapper, "valid", "{ ( [ <")
+		os.Exit(1)
+	}
+}
+
+// EnvsubstPrefixRune returns the envsubst prefix as a rune.
+func (f *Fields) EnvsubstPrefixRune() rune { return rune(f.EnvsubstPrefix[0]) }
+
+// EnvsubstWrapperRune returns the envsubst wrapper as a rune.
+func (f *Fields) EnvsubstWrapperRune() rune { return rune(f.EnvsubstWrapper[0]) }
 
 // validateTimeouts validates timeout configuration values
 func (f *Fields) validateTimeouts() {
@@ -110,6 +131,9 @@ func New() *Fields {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 		slog.Debug("config: verbosity enabled")
 	}
+
+	// Validate envsubst configuration
+	f.validateEnvsubst()
 
 	// Validate timeout configuration
 	f.validateTimeouts()

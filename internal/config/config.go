@@ -30,6 +30,7 @@ type Fields struct {
 	Audiences            []string `arg:"-u,--audience,env:JWT_AUDIENCES" help:"audience for JWT verification" placeholder:"AUDIENCE"`
 	AudienceKey          string   `arg:"--audience-key,env:JWT_AUDIENCE_KEY" default:"aud" help:"claim key to use for audience check" placeholder:"KEY"`
 	PermissiveAuth       bool     `arg:"--permissive-auth,env:PERMISSIVE_AUTH" default:"false" help:"allow invalid tokens to be treated as anonymous (default: false, strict mode)"`
+	BasicAuthFile        string   `arg:"--basic-auth-file,env:BASIC_AUTH_FILE" help:"path to Apache 2.4 htpasswd file (bcrypt only)" placeholder:"FILE"`
 	ExposeBlockedHeaders bool     `arg:"--expose-blocked-headers,env:EXPOSE_BLOCKED_HEADERS" default:"false" help:"expose X-Restrego-* headers to policy as blocked_headers (security: headers still removed from backend)"`
 	EnvsubstPrefix       string   `arg:"--envsubst-prefix,env:ENVSUBST_PREFIX" default:"$" help:"prefix character for env var expansion in policies (one of: $ % & #)" placeholder:"CHAR"`
 	EnvsubstWrapper      string   `arg:"--envsubst-wrapper,env:ENVSUBST_WRAPPER" default:"{" help:"wrapper character for env var expansion in policies (one of: { ( [ <)" placeholder:"CHAR"`
@@ -138,8 +139,18 @@ func New() *Fields {
 	// Validate timeout configuration
 	f.validateTimeouts()
 
-	if f.AzureTenant != "" && len(f.WellKnownURL) > 0 {
-		slog.Error("config: only one auth-provider can be used (azure or well-known)")
+	authCount := 0
+	if f.AzureTenant != "" {
+		authCount++
+	}
+	if len(f.WellKnownURL) > 0 {
+		authCount++
+	}
+	if f.BasicAuthFile != "" {
+		authCount++
+	}
+	if authCount > 1 {
+		slog.Error("config: only one auth-provider may be configured (AZURE_TENANT, WELLKNOWN_OIDC, BASIC_AUTH_FILE)")
 		os.Exit(1)
 	}
 	if len(f.WellKnownURL) > 0 && len(f.Audiences) == 0 {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AB-Lindex/rest-rego/internal/azure"
+	"github.com/AB-Lindex/rest-rego/internal/basicauth"
 	"github.com/AB-Lindex/rest-rego/internal/config"
 	"github.com/AB-Lindex/rest-rego/internal/jwtsupport"
 	"github.com/AB-Lindex/rest-rego/internal/router"
@@ -51,6 +52,13 @@ func New() (*AppData, bool) {
 	case len(app.config.WellKnownURL) > 0:
 		slog.Debug("application: creating jwt-auth-provider", "well-knowns", len(app.config.WellKnownURL))
 		app.auth = jwtsupport.New(app.config.WellKnownURL, app.config.AudienceKey, app.config.Audiences, app.config.AuthKind, app.config.PermissiveAuth)
+		if app.auth == nil {
+			return nil, false
+		}
+
+	case len(app.config.BasicAuthFile) > 0:
+		slog.Debug("application: creating basic-auth-provider", "file", app.config.BasicAuthFile)
+		app.auth = basicauth.New(app.config.BasicAuthFile, app.config.PermissiveAuth)
 		if app.auth == nil {
 			return nil, false
 		}

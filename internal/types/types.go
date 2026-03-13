@@ -11,3 +11,9 @@ type AuthProvider interface {
 type Validator interface {
 	Validate(name string, input interface{}) (interface{}, error)
 }
+
+// AuthChallenger is optionally implemented by AuthProviders that require
+// a specific WWW-Authenticate challenge header on 401 responses.
+type AuthChallenger interface {
+	WWWAuthenticate() string
+}

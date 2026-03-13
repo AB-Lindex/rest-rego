@@ -8,6 +8,9 @@ Complete reference for all rest-rego configuration options.
 - [Core Configuration](#core-configuration)
 - [Network Configuration](#network-configuration)
 - [Authentication Configuration](#authentication-configuration)
+  - [JWT Authentication](#jwt-authentication)
+  - [Azure Graph Authentication](#azure-graph-authentication)
+  - [Basic Authentication](#basic-authentication)
 - [Timeout Configuration](#timeout-configuration)
 - [Configuration Examples](#configuration-examples)
 - [Configuration Validation](#configuration-validation)
@@ -95,10 +98,11 @@ rest-rego
 
 ## Authentication Configuration
 
-rest-rego supports two mutually exclusive authentication modes:
+rest-rego supports three mutually exclusive authentication modes:
 
-1. **JWT Authentication** (recommended)
+1. **JWT Authentication** (recommended for production with OIDC providers)
 2. **Azure Graph Authentication**
+3. **Basic Authentication** (htpasswd/bcrypt)
 
 ### JWT Authentication
 
@@ -174,6 +178,31 @@ rest-rego
 ```
 
 **Note**: Azure Graph mode requires managed identity or service principal with `Application.Read.All` permission.
+
+### Basic Authentication
+
+HTTP Basic Auth using an Apache 2.4 htpasswd file (bcrypt hashes only). User credentials are verified on each request and the username is made available to policies as `input.request.auth.user`.
+
+| Option | Env Variable | Default | Description |
+|--------|--------------|---------|-------------|
+| `--basic-auth-file` | `BASIC_AUTH_FILE` | - | Path to Apache 2.4 htpasswd file (bcrypt only) |
+| `--permissive-auth` | `PERMISSIVE_AUTH` | `false` | Allow requests with unknown usernames (treat as anonymous) |
+
+```bash
+export BASIC_AUTH_FILE="/etc/rest-rego/users.htpasswd"
+rest-rego
+```
+
+**Notes**:
+
+- Only bcrypt hashes (`$2y$`, `$2b$`, `$2a$`) are accepted; MD5 (`$apr1$`) and SHA-1 (`{SHA}`) entries are skipped with a warning
+- bcrypt cost factor must be ≥ 10; cost < 12 logs a warning
+- The htpasswd file is hot-reloaded when changed — no restart required
+- Startup fails if the file contains no valid bcrypt entries
+- Passwords in the `Authorization` header are **never** forwarded to the Rego policy engine
+- Invalid credentials always return `401 Unauthorized` even when `PERMISSIVE_AUTH=true`
+
+See [BASIC-AUTH.md](BASIC-AUTH.md) for complete documentation, including how to generate credentials and Kubernetes Secret mounting patterns.
 
 ### Permissive Authentication Mode
 
@@ -348,10 +377,10 @@ rest-rego validates all configuration on startup and exits with clear error mess
 #### Conflicting Authentication
 
 ```
-❌ Error: cannot use both Azure Tenant and OIDC well-known endpoints
+❌ Error: config: only one auth-provider may be configured (AZURE_TENANT, WELLKNOWN_OIDC, BASIC_AUTH_FILE)
 ```
 
-**Solution**: Choose either JWT (`WELLKNOWN_OIDC`) or Azure (`AZURE_TENANT`), not both.
+**Solution**: Choose exactly one authentication mode — set only one of `WELLKNOWN_OIDC`, `AZURE_TENANT`, or `BASIC_AUTH_FILE`.
 
 #### Missing JWT Audience
 
@@ -389,7 +418,7 @@ rest-rego validates all configuration on startup and exits with clear error mess
 
 Before deploying rest-rego:
 
-- [ ] Choose one authentication mode (JWT or Azure)
+- [ ] Choose one authentication mode (JWT, Azure, or Basic Auth)
 - [ ] Set required variables for chosen auth mode
 - [ ] Verify policy directory exists and contains `.rego` files
 - [ ] Test backend connectivity (host/port reachable)

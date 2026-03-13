@@ -33,7 +33,11 @@ func (proxy *Proxy) authHandler(next http.Handler) http.Handler {
 			slog.Warn("router: authentication failed",
 				"path", r.URL.Path,
 				"method", r.Method)
-			w.Header().Set("WWW-Authenticate", "Bearer")
+			challenge := "Bearer"
+			if c, ok := proxy.auth.(types.AuthChallenger); ok {
+				challenge = c.WWWAuthenticate()
+			}
+			w.Header().Set("WWW-Authenticate", challenge)
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 
 		case errors.Is(err, types.ErrAuthenticationUnavailable):

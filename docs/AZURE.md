@@ -66,6 +66,12 @@ sequenceDiagram
   b->>u: Response
 ```
 
+## Permissive Mode
+
+Set `PERMISSIVE_AUTH=true` to allow requests with missing or unrecognized tokens to pass through as anonymous rather than returning `401 Unauthorized`. The policy receives `null` for `input.user` and can decide whether to allow or deny the request.
+
+See [PERMISSIVE.md](PERMISSIVE.md) for complete documentation, including how to detect anonymous requests in the backend service.
+
 ## Input fields for policies
 
 | Field                       | Explanation |

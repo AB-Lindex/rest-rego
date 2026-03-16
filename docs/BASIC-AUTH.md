@@ -94,19 +94,20 @@ package request.rego
 
 import rego.v1
 
-# Allowed users per path prefix
-allowed_users := {
-    "/admin": {"alice"},
-    "/reports": {"alice", "bob"},
-}
-
 default allow := false
 
+user := input.request.auth.user
+
+# Admin endpoints: restricted users only
 allow if {
-    input.request.auth.kind == "basic"
-    some prefix, users in allowed_users
-    startswith(concat("/", input.request.path), prefix)
-    input.request.auth.user in users
+    input.request.path[0] == "admin"
+    user in {"alice"}
+}
+
+# Reports endpoints: authorized users
+allow if {
+    input.request.path[0] == "reports"
+    user in {"alice", "bob"}
 }
 ```
 
@@ -123,7 +124,12 @@ allow if {
     input.request.auth.kind == "basic"
     input.request.auth.user != ""
 }
+
+# Assign custom header forwarded to backend
+user := input.request.auth.user
 ```
+
+**Resulting header:** `X-Restrego-User: alice`
 
 ## Kubernetes Secret Mounting
 
@@ -192,6 +198,8 @@ rest-rego
 | Wrong password            | `401 Unauthorized`                  | `401 Unauthorized`                  |
 
 **Wrong passwords always return `401 Unauthorized` regardless of permissive mode.** This prevents credential-stuffing attacks from silently downgrading to anonymous access.
+
+See [PERMISSIVE.md](PERMISSIVE.md) for complete documentation, including how to detect anonymous requests in the backend service.
 
 ## Hot-Reload
 

@@ -215,6 +215,8 @@ rest-rego
 
 **Warning**: In permissive mode, unauthenticated requests are passed to policies with empty auth context. Your policies must handle this explicitly.
 
+See [PERMISSIVE.md](PERMISSIVE.md) for complete documentation, including behavior per auth provider and how to detect anonymous requests in the backend service.
+
 ## Timeout Configuration
 
 | Option | Env Variable | Default | Description |

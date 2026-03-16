@@ -14,6 +14,8 @@ JWT verification requires:
 - **WSO2 API Manager** - Custom JWT format with non-standard claims ([see WSO2.md](WSO2.md))
 - Any standard OIDC-compliant identity provider
 
+**Permissive mode**: Set `PERMISSIVE_AUTH=true` to allow requests with missing or invalid tokens to pass through as anonymous. See [PERMISSIVE.md](PERMISSIVE.md) for details.
+
 ## Standard OIDC Configuration
 
 For standard OIDC providers (like Azure), rest-rego automatically:

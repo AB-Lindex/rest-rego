@@ -1,0 +1,18 @@
+@rr=http://localhost:8181
+
+GET {{rr}}/test
+
+###
+GET {{rr}}/public
+
+###
+GET {{rr}}/test
+Authorization: Basic alice:alice
+
+###
+GET {{rr}}/test
+Authorization: Basic alice:ERROR
+
+###
+GET {{rr}}/public
+Authorization: Basic alice:ERROR

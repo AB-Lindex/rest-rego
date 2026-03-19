@@ -74,7 +74,7 @@ func NewInfo(r *http.Request, authKey string) *Info {
 		a := &RequestAuth{}
 		parts := strings.SplitN(authHdr.(string), " ", 2)
 		if len(parts) == 2 {
-			a.Kind = parts[0]
+			a.Kind = strings.ToLower(parts[0])
 			a.Token = strings.TrimSpace(parts[1])
 		} else {
 			a.Token = parts[0]

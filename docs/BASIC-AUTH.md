@@ -163,7 +163,7 @@ spec:
           image: lindex/rest-rego:latest
           env:
             - name: BASIC_AUTH_FILE
-              value: /etc/rest-rego/users.htpasswd
+              value: /users/users.htpasswd
             - name: BACKEND_PORT
               value: "8080"
           volumeMounts:

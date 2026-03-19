@@ -79,6 +79,9 @@ func (b *BasicAuthProvider) Authenticate(info *types.Info, _ *http.Request) erro
 		return types.ErrAuthenticationFailed
 	}
 
+	// Set authenticated user info for logging and policy evaluation
+	info.User = auth.User
+
 	return nil
 }
 

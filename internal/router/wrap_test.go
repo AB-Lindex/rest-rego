@@ -148,7 +148,7 @@ func TestWrapHandler(t *testing.T) {
 				w.Write([]byte(info.Request.Auth.Password))
 			},
 			expectedStatus: http.StatusOK,
-			expectedBody:   "Basic,test-user,test-password",
+			expectedBody:   "basic,test-user,test-password",
 		},
 		{
 			name:   "Bearer auth response",
@@ -177,7 +177,7 @@ func TestWrapHandler(t *testing.T) {
 				w.Write([]byte(info.Request.Auth.Token))
 			},
 			expectedStatus: http.StatusOK,
-			expectedBody:   "Bearer,S0m3r4nd0mT0k3n",
+			expectedBody:   "bearer,S0m3r4nd0mT0k3n",
 		},
 	}
 

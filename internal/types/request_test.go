@@ -98,7 +98,7 @@ func TestNewInfo(t *testing.T) {
 				"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
 			},
 			expectedAuth: &RequestAuth{
-				Kind:  "Bearer",
+				Kind:  "bearer",
 				Token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
 			},
 		},
@@ -119,7 +119,7 @@ func TestNewInfo(t *testing.T) {
 				"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("user:password")),
 			},
 			expectedAuth: &RequestAuth{
-				Kind:     "Basic",
+				Kind:     "basic",
 				Token:    base64.StdEncoding.EncodeToString([]byte("user:password")),
 				User:     "user",
 				Password: "password",
@@ -142,7 +142,7 @@ func TestNewInfo(t *testing.T) {
 				"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte("user")),
 			},
 			expectedAuth: &RequestAuth{
-				Kind:  "Basic",
+				Kind:  "basic",
 				Token: base64.StdEncoding.EncodeToString([]byte("user")),
 				User:  "user",
 			},
@@ -184,7 +184,7 @@ func TestNewInfo(t *testing.T) {
 				"X-Api-Key": "Bearer secret-token",
 			},
 			expectedAuth: &RequestAuth{
-				Kind:  "Bearer",
+				Kind:  "bearer",
 				Token: "secret-token",
 			},
 		},
@@ -233,7 +233,7 @@ func TestNewInfo(t *testing.T) {
 				"Authorization": "Bearer   token-with-spaces  ",
 			},
 			expectedAuth: &RequestAuth{
-				Kind:  "Bearer",
+				Kind:  "bearer",
 				Token: "token-with-spaces",
 			},
 		},
@@ -648,7 +648,7 @@ func TestNewInfo_EdgeCases(t *testing.T) {
 		if info.Request.Auth == nil {
 			t.Fatal("Expected auth to be set")
 		}
-		if info.Request.Auth.Kind != "Basic" {
+		if info.Request.Auth.Kind != "basic" {
 			t.Errorf("Expected Kind=Basic, got %q", info.Request.Auth.Kind)
 		}
 		// User and Password should not be set because decoding failed

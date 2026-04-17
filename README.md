@@ -64,6 +64,8 @@ rest-rego supports multiple authentication methods:
 | **[JWT (Standard OIDC)](docs/JWT.md)** ⭐ | Most use cases, Azure AD, any OIDC provider | Simple | Fastest (<1ms) |
 | **[JWT (WSO2)](docs/WSO2.md)** | WSO2 API Manager environments | Moderate | Fast (<2ms) |
 | **[Azure Graph](docs/AZURE.md)** | Azure-heavy environments needing app metadata | Moderate | Good (with caching) |
+| **[Basic Auth](docs/BASIC-AUTH.md)** | Internal tools, simple credential management | Simple | Fast (<1ms) |
+| **[No-Auth](docs/NO-AUTH.md)** | Policy-only access control, internal mesh services | Minimal | Fastest (no validation) |
 
 **Recommendation**: Use JWT authentication for better performance and simpler setup. Choose WSO2 variant if using WSO2 API Manager with custom claims. Azure Graph is best when you need real-time Azure AD application metadata.
 

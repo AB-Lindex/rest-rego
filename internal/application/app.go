@@ -12,6 +12,7 @@ import (
 	"github.com/AB-Lindex/rest-rego/internal/basicauth"
 	"github.com/AB-Lindex/rest-rego/internal/config"
 	"github.com/AB-Lindex/rest-rego/internal/jwtsupport"
+	"github.com/AB-Lindex/rest-rego/internal/noauth"
 	"github.com/AB-Lindex/rest-rego/internal/router"
 	"github.com/AB-Lindex/rest-rego/internal/types"
 	"github.com/AB-Lindex/rest-rego/pkg/regocache"
@@ -45,26 +46,23 @@ func New() (*AppData, bool) {
 	case len(app.config.AzureTenant) > 0:
 		slog.Debug("application: creating auth provider", "tenant", app.config.AzureTenant)
 		app.auth = azure.New(app.config.AzureTenant, app.config.AuthHeader, app.config.PermissiveAuth)
-		if app.auth == nil {
-			return nil, false
-		}
 
 	case len(app.config.WellKnownURL) > 0:
 		slog.Debug("application: creating jwt-auth-provider", "well-knowns", len(app.config.WellKnownURL))
 		app.auth = jwtsupport.New(app.config.WellKnownURL, app.config.AudienceKey, app.config.Audiences, app.config.AuthKind, app.config.PermissiveAuth)
-		if app.auth == nil {
-			return nil, false
-		}
 
 	case len(app.config.BasicAuthFile) > 0:
 		slog.Debug("application: creating basic-auth-provider", "file", app.config.BasicAuthFile)
 		app.auth = basicauth.New(app.config.BasicAuthFile, app.config.PermissiveAuth)
-		if app.auth == nil {
-			return nil, false
-		}
+
+	case app.config.NoAuth:
+		app.auth = noauth.New(app.config.PermissiveAuth)
 
 	default:
 		slog.Error("application: no auth-provider configured")
+		return nil, false
+	}
+	if app.auth == nil {
 		return nil, false
 	}
 

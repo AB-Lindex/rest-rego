@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AB-Lindex/go-resthelp"
@@ -27,14 +28,14 @@ type JWTSupport struct {
 	permissive    bool // true = treat auth failures as anonymous
 }
 
-var algConverter = make(map[string]jwa.KeyAlgorithm)
+var algConverter sync.Map
 
 func getAlgorithm(name string) jwa.KeyAlgorithm {
-	if alg, ok := algConverter[name]; ok {
-		return alg
+	if alg, ok := algConverter.Load(name); ok {
+		return alg.(jwa.KeyAlgorithm)
 	}
 	alg := jwa.KeyAlgorithmFrom(name)
-	algConverter[name] = alg
+	algConverter.Store(name, alg)
 	return alg
 }
 

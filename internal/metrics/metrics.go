@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/AB-Lindex/rest-rego/internal/types"
-	"github.com/ninlil/butler/bufferedresponse"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -97,12 +96,20 @@ func Handler() http.HandlerFunc {
 	return promhttp.HandlerFor(metrics.reg, promhttp.HandlerOpts{}).ServeHTTP
 }
 
+// StatusWriter is the interface expected by the metrics middleware.
+// It is satisfied by the responseTracker in the router package.
+type StatusWriter interface {
+	http.ResponseWriter
+	Status() int
+	Size() int
+}
+
 // Wrap wraps a handler for metrics-collection
 func Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w2, ok := w.(*bufferedresponse.ResponseWriter)
+		w2, ok := w.(StatusWriter)
 		if !ok {
-			panic("metrics: bufferedresponse.ResponseWriter expected")
+			panic("metrics: StatusWriter expected")
 		}
 
 		now := time.Now()

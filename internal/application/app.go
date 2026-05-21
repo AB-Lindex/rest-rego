@@ -33,6 +33,7 @@ func New() (*AppData, bool) {
 	app.config = config.New()
 
 	app.startMgmt()
+	startPprof()
 
 	// create file-cache
 	slog.Debug("application: creating policy cache", "dir", app.config.PolicyDir)

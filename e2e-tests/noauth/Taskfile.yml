@@ -1,0 +1,35 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  helpers:
+    desc: Start mock backend for the no-auth scenario
+    cmds:
+      - go run github.com/AB-Lindex/rest-rego/e2e-tests/noauth/helpers
+
+  restrego:
+    desc: Start rest-rego proxy for the no-auth scenario (requires helpers to be running)
+    dir: ../..
+    preconditions:
+      - test -f ./bin/restrego || (echo "run 'task build' first to compile the restrego binary" && exit 1)
+    env:
+      NO_AUTH: "true"
+      BACKEND_HOST: 127.0.0.1
+      BACKEND_PORT: "18204"
+      LISTEN_ADDR: :18201
+      MGMT_ADDR: :18203
+      POLICY_DIR: e2e-tests/noauth/policies
+    vars:
+      BIN: '{{default "./bin/restrego" .BIN}}'
+    cmds:
+      - "{{.BIN}}"
+
+  restrego-pprof:
+    desc: Start rest-rego proxy (pprof build) for the no-auth scenario - pprof available on :6060
+    preconditions:
+      - test -f ../../bin/restrego-pprof || (echo "run 'task build' first to compile the restrego-pprof binary" && exit 1)
+    cmds:
+      - task: restrego
+        vars:
+          BIN: ./bin/restrego-pprof

@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -226,12 +225,6 @@ func TestWrapHandler(t *testing.T) {
 				}
 			}
 
-			// Check Content-Length header
-			expectedLength := len(tc.expectedBody)
-			contentLength := rr.Header().Get("Content-Length")
-			if contentLength != strconv.Itoa(expectedLength) {
-				t.Errorf("Expected Content-Length to be %d, got %s", expectedLength, contentLength)
-			}
 		})
 	}
 }

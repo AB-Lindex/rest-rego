@@ -59,7 +59,7 @@ func NewInfo(r *http.Request, authKey string) *Info {
 	i.Request.Method = r.Method
 	i.Request.Path = strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	i.Request.Size = r.ContentLength
-	i.URL = r.URL.String()
+	i.URL = r.URL.Path
 
 	i.Request.Headers = make(map[string]interface{})
 	for k, v := range r.Header {

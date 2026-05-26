@@ -1,0 +1,15 @@
+# Trivy configuration
+# https://aquasecurity.github.io/trivy/latest/docs/references/configuration/config-file/
+
+ignorefile: /.trivyignore   # mounted from .trivyignore in the repo root
+
+cache:
+  dir: /trivy-cache   # mapped to ./temp/trivy-db on the host via volume mount
+
+scan:
+  skip-dirs:
+    - examples/       # Kubernetes manifests are illustrations only, not production code
+    - temp/           # Temporary/scratch files
+    - e2e-tests/      # End-to-end test helpers and scripts
+    - bin/            # Compiled binaries
+    - heap-dumps/     # Runtime heap dumps

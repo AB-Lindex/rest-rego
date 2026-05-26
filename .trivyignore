@@ -1,0 +1,43 @@
+# Trivy ignore file - suppresses specific misconfig check IDs
+# https://trivy.dev/docs/configuration/filtering/#trivyignore-file
+
+# DS-0026: No HEALTHCHECK defined
+# Health checks are handled by the Kubernetes orchestrator, not the container itself
+DS-0026
+
+# KSV*: Kubernetes Security Vulnerabilities
+# These fire on the example manifests in examples/kubernetes/ which are
+# intentionally minimal illustrations, not production-hardened deployments.
+KSV001
+KSV002
+KSV003
+KSV004
+KSV005
+KSV006
+KSV008
+KSV009
+KSV010
+KSV011
+KSV012
+KSV013
+KSV014
+KSV015
+KSV016
+KSV017
+KSV018
+KSV019
+KSV020
+KSV021
+KSV023
+KSV025
+KSV028
+KSV030
+KSV036
+KSV037
+KSV038
+KSV039
+KSV040
+KSV041
+KSV043
+KSV104
+KSV106

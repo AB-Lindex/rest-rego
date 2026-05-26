@@ -41,6 +41,38 @@ tasks:
     cmds:
       - go build -o bin/restrego ./cmd
       - go build -tags pprof -o bin/restrego-pprof ./cmd
+
+  scan:
+    desc: Scan source code and dependencies for vulnerabilities using Trivy
+    preconditions:
+      - which podman
+    cmds:
+      - mkdir -p ./temp/trivy-db
+      - podman run --rm
+          -v ./:/workspace:ro,z
+          -v ./.trivyignore:/.trivyignore:ro,z
+          -v ./temp/trivy-db:/trivy-cache:z
+          docker.io/aquasec/trivy:latest
+          fs --config /workspace/trivy.yaml --scanners vuln,secret,misconfig /workspace
+
+  scan-image:
+    desc: Build and scan the container image for vulnerabilities using Trivy
+    preconditions:
+      - which podman
+    vars:
+      IMAGE: rest-rego:latest
+    cmds:
+      - mkdir -p ./temp/trivy-db
+      - podman build -t {{.IMAGE}} .
+      - podman save {{.IMAGE}} -o /tmp/trivy-scan-image.tar
+      - podman run --rm
+          -v /tmp/trivy-scan-image.tar:/image.tar:ro,z
+          -v ./trivy.yaml:/trivy.yaml:ro,z
+          -v ./.trivyignore:/.trivyignore:ro,z
+          -v ./temp/trivy-db:/trivy-cache:z
+          docker.io/aquasec/trivy:latest
+          image --config /trivy.yaml --input /image.tar
+      - rm -f /tmp/trivy-scan-image.tar
   
   run-azure:
     desc: Run the restrego using Azure OIDC

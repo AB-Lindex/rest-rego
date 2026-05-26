@@ -664,7 +664,9 @@ func TestNewInfo_EdgeCases(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/users?id=123&sort=name", nil)
 		info := NewInfo(req, "Authorization")
 
-		expectedURL := "/api/users?id=123&sort=name"
+		// URL must not include query parameters - it's used as a Prometheus metric label
+		// and including query params would cause unbounded high cardinality.
+		expectedURL := "/api/users"
 		if info.URL != expectedURL {
 			t.Errorf("Expected URL %q, got %q", expectedURL, info.URL)
 		}

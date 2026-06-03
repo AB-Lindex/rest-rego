@@ -4,11 +4,14 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"hash/maphash"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/AB-Lindex/rest-rego/internal/types"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -16,7 +19,10 @@ import (
 var ErrNoValidCredentials = errors.New("basicauth: no valid credentials found in file")
 
 // minAllowedCost is the lowest bcrypt cost accepted when loading credentials (REQ-007).
-const minAllowedCost = 10
+const (
+	minAllowedCost  = 10
+	defaultCacheTTL = 2 * time.Minute
+)
 
 // loadFile parses an Apache 2.4 htpasswd file and returns a credential map.
 // Only bcrypt hashes ($2y$, $2b$, $2a$) are accepted; all other formats are
@@ -91,7 +97,33 @@ func loadFile(filePath string) (*credMap, error) {
 	return &creds, nil
 }
 
+func (b *BasicAuthProvider) createCacheKey(user, password string) uint64 {
+	var h maphash.Hash
+	h.SetSeed(b.seed) // make sure to re-use the same seed for consistent hashing across calls
+	h.WriteString(user)
+	h.WriteByte(':')
+	h.WriteString(password)
+
+	return h.Sum64()
+}
+
 // verifyPassword checks a bcrypt hash against the given plaintext password.
-func verifyPassword(hash, password string) error {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+func (b *BasicAuthProvider) verifyPassword(user, hash, password string) error {
+	cacheKey := b.createCacheKey(user, password)
+	if b.cache != nil {
+		if valid, found := b.cache.Get(cacheKey); found {
+			// Cache hit for invalid credentials, treat as authentication failure.
+			if !valid {
+				return types.ErrAuthenticationFailed
+			}
+			// Cache hit for valid credentials, skip bcrypt check.
+			return nil
+		}
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	if b.cache != nil {
+		b.cache.SetWithTTL(cacheKey, err == nil, 1, defaultCacheTTL)
+	}
+	return err
 }

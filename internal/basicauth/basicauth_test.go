@@ -3,6 +3,7 @@ package basicauth
 import (
 	"errors"
 	"fmt"
+	"hash/maphash"
 	"net/http"
 	"sync"
 	"testing"
@@ -37,6 +38,7 @@ func getTestCreds() credMap {
 func newTestProvider(creds credMap, permissive bool) *BasicAuthProvider {
 	b := &BasicAuthProvider{permissive: permissive}
 	b.creds.Store(&creds)
+	b.seed = maphash.MakeSeed()
 	return b
 }
 

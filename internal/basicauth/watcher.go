@@ -25,6 +25,9 @@ func startWatcher(b *BasicAuthProvider) {
 					continue
 				}
 				b.creds.Store(newCreds)
+				if b.cache != nil {
+					b.cache.Clear() // Clear cache to prevent stale entries after credential changes.
+				}
 				slog.Info("basicauth: reloaded credentials", "count", len(*newCreds), "file", b.filePath)
 			}
 

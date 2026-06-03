@@ -1,6 +1,7 @@
 package basicauth
 
 import (
+	"hash/maphash"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 
 	"github.com/AB-Lindex/rest-rego/internal/types"
+	"github.com/dgraph-io/ristretto/v2"
 )
 
 type credMap = map[string]string // username → bcrypt hash
@@ -19,6 +21,8 @@ type BasicAuthProvider struct {
 	creds      atomic.Pointer[credMap]
 	permissive bool
 	watcher    *fsnotify.Watcher
+	cache      *ristretto.Cache[uint64, bool]
+	seed       maphash.Seed
 }
 
 // New creates a BasicAuthProvider that reads credentials from filePath.
@@ -49,6 +53,18 @@ func New(filePath string, permissive bool) *BasicAuthProvider {
 		go startWatcher(b)
 	}
 
+	cache, err := ristretto.NewCache(&ristretto.Config[uint64, bool]{
+		NumCounters: 10000, // number of keys to track frequency of.
+		MaxCost:     1000,  // maximum cost of cache (no-of-entries since we use cost=1).
+		BufferItems: 64,    // number of keys per Get buffer.
+	})
+	if err != nil {
+		slog.Warn("basicauth: failed to create cache, authentication performance may be degraded", "error", err)
+	}
+	b.cache = cache
+
+	b.seed = maphash.MakeSeed()
+
 	return b
 }
 
@@ -74,7 +90,7 @@ func (b *BasicAuthProvider) Authenticate(info *types.Info, _ *http.Request) erro
 		return handleFailure(b.permissive)
 	}
 
-	if err := verifyPassword(hash, auth.Password); err != nil {
+	if err := b.verifyPassword(auth.User, hash, auth.Password); err != nil {
 		// Wrong password is always a hard failure regardless of permissive mode (SEC-002).
 		return types.ErrAuthenticationFailed
 	}

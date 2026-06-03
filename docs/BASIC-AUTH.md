@@ -12,6 +12,7 @@ rest-rego supports HTTP Basic Auth as an authentication provider. Credentials ar
 - [Kubernetes Secret Mounting](#kubernetes-secret-mounting)
 - [Permissive Mode](#permissive-mode)
 - [Hot-Reload](#hot-reload)
+- [Bcrypt Verification Cache](#bcrypt-verification-cache)
 - [Security Notes](#security-notes)
 
 ## Overview
@@ -210,6 +211,19 @@ rest-rego watches the htpasswd file with `fsnotify` and reloads credentials atom
 - If the new file is invalid or empty, rest-rego retains the last valid credential set and logs an error
 
 No restart is required after updating the htpasswd file.
+
+## Bcrypt Verification Cache
+
+bcrypt is intentionally expensive (cost ≥ 12 means ~250 ms per verification). To avoid re-running bcrypt on every request for the same credentials, rest-rego keeps an in-process cache of recent verification results.
+
+Each cache entry is keyed by a 64-bit hash of `username:password`, computed with `hash/maphash` using a random seed generated at startup. The seed is never persisted or exported, so cache keys cannot be precomputed across restarts.
+
+`maphash` was chosen over a cryptographic hash (e.g. HMAC-SHA256) for two reasons:
+
+- **Performance**: `maphash` is 10–20× faster than HMAC-SHA256 for short strings, keeping per-request overhead well below 1 µs.
+- **Sufficient security**: The cache key only needs collision resistance within a single process lifetime. `maphash` provides a 64-bit output with a randomised seed, making collisions computationally infeasible at any realistic request rate.
+
+A collision between two different `(user, password)` pairs would allow a wrong password to hit a valid cached result. With 64-bit output and a random seed the birthday-bound probability is roughly 1 in 2³² (≈ 4 billion unique pairs), well beyond what any rate-limited authentication endpoint could reach.
 
 ## Security Notes
 

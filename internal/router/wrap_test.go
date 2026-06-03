@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AB-Lindex/rest-rego/internal/config"
 	"github.com/AB-Lindex/rest-rego/internal/types"
 )
 
@@ -190,6 +191,7 @@ func TestWrapHandler(t *testing.T) {
 			// Create proxy with test auth key
 			proxy := &Proxy{
 				authKey: test_auth_key,
+				config:  &config.Fields{},
 			}
 
 			// Create test request

@@ -31,7 +31,19 @@ Standard Go runtime and process metrics are also exposed, including `go_*` and `
 
 ## The URL Label
 
-The `url` label on HTTP request metrics is used to group requests by logical endpoint. By default it is set to the request path (without query string) as received by rest-rego.
+The `url` label on HTTP request metrics is used to group requests by logical endpoint. The default behaviour is controlled by `URL_METRICS_LEVEL`.
+
+### URL_METRICS_LEVEL
+
+`URL_METRICS_LEVEL` (env) / `--url-metrics-level` (flag) controls how much of the request path is included in the `url` label before the policy has a chance to override it.
+
+| Value | Behaviour |
+|-------|-----------|
+| `< 0` | Full request path — use with caution, may cause unbounded cardinality |
+| `0` *(default)* | Path is suppressed; label is always `"/"` |
+| `N > 0` | First N path segments only (e.g. `2` → `/orders/items` from `/orders/items/42/detail`) |
+
+The policy-returned `url` value (see below) always takes precedence over the level-based value.
 
 ### Rewriting the URL Label from Policy
 

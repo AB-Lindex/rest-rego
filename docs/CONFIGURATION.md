@@ -35,6 +35,7 @@ rest-rego supports configuration via:
 | `--pattern` | `FILE_PATTERN` | `*.rego` | File pattern to match for policies |
 | `-r, --requestrego` | `REQUEST_REGO` | `request.rego` | Main policy file for requests |
 | `--expose-blocked-headers` | `EXPOSE_BLOCKED_HEADERS` | `false` | Expose blocked `X-Restrego-*` headers to policies |
+| `--url-metrics-level` | `URL_METRICS_LEVEL` | `0` | Path detail in Prometheus `url` label (`<0`=full path, `0`=none, `N`=first N segments). See [METRICS.md](METRICS.md#url_metrics_level) |
 
 ### Examples
 

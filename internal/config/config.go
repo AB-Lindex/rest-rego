@@ -35,6 +35,7 @@ type Fields struct {
 	ExposeBlockedHeaders bool     `arg:"--expose-blocked-headers,env:EXPOSE_BLOCKED_HEADERS" default:"false" help:"expose X-Restrego-* headers to policy as blocked_headers (security: headers still removed from backend)"`
 	EnvsubstPrefix       string   `arg:"--envsubst-prefix,env:ENVSUBST_PREFIX" default:"$" help:"prefix character for env var expansion in policies (one of: $ % & #)" placeholder:"CHAR"`
 	EnvsubstWrapper      string   `arg:"--envsubst-wrapper,env:ENVSUBST_WRAPPER" default:"{" help:"wrapper character for env var expansion in policies (one of: { ( [ <)" placeholder:"CHAR"`
+	URLMetricsLevel      int      `arg:"--url-metrics-level,env:URL_METRICS_LEVEL" default:"0" help:"level of URL detail to include in metrics (<0=full path, 0=none, >0=up to N segments)"`
 
 	// Timeout configuration for proxy server
 	ReadHeaderTimeout time.Duration `arg:"--read-header-timeout,env:READ_HEADER_TIMEOUT" default:"10s" help:"timeout for reading request headers"`
@@ -173,6 +174,10 @@ func New() *Fields {
 		slog.Warn("config: permissive authentication mode enabled - invalid tokens will be treated as anonymous")
 	} else {
 		slog.Info("config: strict authentication mode - invalid tokens will be rejected")
+	}
+
+	if f.URLMetricsLevel < 0 {
+		slog.Warn("config: url-metrics-level is negative — full request paths will be used as Prometheus url labels, which may cause unbounded cardinality")
 	}
 
 	return f

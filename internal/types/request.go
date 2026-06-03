@@ -53,13 +53,27 @@ func GetBlockedHeaders(r *http.Request) map[string]interface{} {
 	return nil
 }
 
+// TruncateURLForMetrics returns a truncated form of the request URL for use as a Prometheus label.
+// level < 0: full path (original r.URL.Path)
+// level == 0: suppress path detail, return "/"
+// level > 0: return up to the first N path segments
+func TruncateURLForMetrics(path string, segments []string, level int) string {
+	if level < 0 {
+		return path
+	}
+	if level == 0 {
+		return "/"
+	}
+	return "/" + strings.Join(segments[:min(level, len(segments))], "/")
+}
+
 // NewInfo creates a new instance of the Info based on the request
-func NewInfo(r *http.Request, authKey string) *Info {
+func NewInfo(r *http.Request, authKey string, urlMetricsLevel int) *Info {
 	i := new(Info)
 	i.Request.Method = r.Method
 	i.Request.Path = strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
 	i.Request.Size = r.ContentLength
-	i.URL = r.URL.Path
+	i.URL = TruncateURLForMetrics(r.URL.Path, i.Request.Path, urlMetricsLevel)
 
 	i.Request.Headers = make(map[string]interface{})
 	for k, v := range r.Header {

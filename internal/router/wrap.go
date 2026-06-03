@@ -48,7 +48,7 @@ func (proxy *Proxy) WrapHandler(next http.Handler) http.Handler {
 		now := time.Now()
 		w2 := newResponseTracker(w)
 
-		info := types.NewInfo(r, proxy.authKey)
+		info := types.NewInfo(r, proxy.authKey, proxy.config.URLMetricsLevel)
 		r2 := info.RequestWithInfo(r)
 
 		next.ServeHTTP(w2, r2)

@@ -274,7 +274,7 @@ func TestNewInfo(t *testing.T) {
 			req.ContentLength = tc.contentLength
 
 			// Call NewInfo
-			info := NewInfo(req, tc.authKey)
+			info := NewInfo(req, tc.authKey, -1)
 
 			// Verify method
 			if info.Request.Method != tc.expectedMethod {
@@ -638,12 +638,77 @@ func TestGetBearerToken(t *testing.T) {
 	}
 }
 
+func TestTruncateURLForMetrics(t *testing.T) {
+	segments := []string{"orders", "items", "42", "detail"}
+
+	testCases := []struct {
+		name     string
+		path     string
+		segments []string
+		level    int
+		expected string
+	}{
+		// level < 0: full path returned as-is
+		{"full path", "/orders/items/42/detail", segments, -1, "/orders/items/42/detail"},
+		{"full path with trailing slash", "/orders/", []string{"orders", ""}, -1, "/orders/"},
+
+		// level == 0: suppress to "/"
+		{"suppress path", "/orders/items/42/detail", segments, 0, "/"},
+		{"suppress root", "/", []string{""}, 0, "/"},
+
+		// level > 0: first N segments
+		{"1 segment", "/orders/items/42/detail", segments, 1, "/orders"},
+		{"2 segments", "/orders/items/42/detail", segments, 2, "/orders/items"},
+		{"exact length", "/orders/items/42/detail", segments, 4, "/orders/items/42/detail"},
+		{"level exceeds segments", "/orders/items/42/detail", segments, 10, "/orders/items/42/detail"},
+		{"1 segment from root", "/", []string{""}, 1, "/"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := TruncateURLForMetrics(tc.path, tc.segments, tc.level)
+			if got != tc.expected {
+				t.Errorf("TruncateURLForMetrics(%q, %v, %d) = %q, want %q",
+					tc.path, tc.segments, tc.level, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestNewInfo_URLMetricsLevel(t *testing.T) {
+	testCases := []struct {
+		name        string
+		path        string
+		level       int
+		expectedURL string
+	}{
+		{"level -1 returns full path", "/api/v1/users/123", -1, "/api/v1/users/123"},
+		{"level 0 suppresses path", "/api/v1/users/123", 0, "/"},
+		{"level 1 returns first segment", "/api/v1/users/123", 1, "/api"},
+		{"level 2 returns first two segments", "/api/v1/users/123", 2, "/api/v1"},
+		{"level exceeds depth returns full path", "/api/v1", 10, "/api/v1"},
+		{"root path level -1", "/", -1, "/"},
+		{"root path level 0", "/", 0, "/"},
+		{"root path level 1", "/", 1, "/"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tc.path, nil)
+			info := NewInfo(req, "Authorization", tc.level)
+			if info.URL != tc.expectedURL {
+				t.Errorf("NewInfo URL: got %q, want %q", info.URL, tc.expectedURL)
+			}
+		})
+	}
+}
+
 func TestNewInfo_EdgeCases(t *testing.T) {
 	t.Run("Invalid base64 in Basic auth is ignored", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("Authorization", "Basic not-valid-base64!!!")
 
-		info := NewInfo(req, "Authorization")
+		info := NewInfo(req, "Authorization", -1)
 
 		if info.Request.Auth == nil {
 			t.Fatal("Expected auth to be set")
@@ -662,7 +727,7 @@ func TestNewInfo_EdgeCases(t *testing.T) {
 
 	t.Run("Path with query parameters", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/users?id=123&sort=name", nil)
-		info := NewInfo(req, "Authorization")
+		info := NewInfo(req, "Authorization", -1)
 
 		// URL must not include query parameters - it's used as a Prometheus metric label
 		// and including query params would cause unbounded high cardinality.
@@ -679,7 +744,7 @@ func TestNewInfo_EdgeCases(t *testing.T) {
 
 	t.Run("Empty headers map is initialized", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
-		info := NewInfo(req, "Authorization")
+		info := NewInfo(req, "Authorization", -1)
 
 		if info.Request.Headers == nil {
 			t.Error("Expected Headers map to be initialized, got nil")
@@ -756,7 +821,7 @@ func TestNewInfo_BlockedHeaders(t *testing.T) {
 			req = tc.setupContext(req)
 
 			// Call NewInfo
-			info := NewInfo(req, "Authorization")
+			info := NewInfo(req, "Authorization", -1)
 
 			// Verify blocked headers
 			if tc.expectNil {
@@ -786,7 +851,7 @@ func TestRequestInfo_JSONMarshal_BlockedHeaders(t *testing.T) {
 		}
 		req = req.WithContext(context.WithValue(ctx, CtxBlockedHeadersKey, blocked))
 
-		info := NewInfo(req, "Authorization")
+		info := NewInfo(req, "Authorization", -1)
 
 		// Marshal to JSON
 		data, err := json.Marshal(info.Request)
@@ -811,7 +876,7 @@ func TestRequestInfo_JSONMarshal_BlockedHeaders(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		// Don't add anything to context
 
-		info := NewInfo(req, "Authorization")
+		info := NewInfo(req, "Authorization", -1)
 
 		// Marshal to JSON
 		data, err := json.Marshal(info.Request)
@@ -836,7 +901,7 @@ func TestRequestInfo_JSONMarshal_BlockedHeaders(t *testing.T) {
 		}
 		req = req.WithContext(context.WithValue(ctx, CtxBlockedHeadersKey, blocked))
 
-		info := NewInfo(req, "Authorization")
+		info := NewInfo(req, "Authorization", -1)
 
 		// Marshal to JSON
 		data, err := json.Marshal(info.Request)

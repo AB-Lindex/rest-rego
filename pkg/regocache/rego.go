@@ -137,7 +137,7 @@ func (r *RegoCache) Validate(name string, input interface{}) (interface{}, error
 		return nil, err
 	}
 
-	rs, err := query.Eval(context.Background(), rego.EvalInput(input), rego.EvalPrintHook(r))
+	rs, err := query.Eval(context.Background(), rego.EvalInput(input), rego.EvalPrintHook(r), rego.EvalInstrument(false))
 	if err != nil {
 		slog.Error("rego: eval error", "error", err)
 		return nil, err

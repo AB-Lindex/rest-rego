@@ -22,7 +22,7 @@ Every call to `JWTSupport.Authenticate()` rebuilds a `[]jwt.ParseOption` slice i
 
 The allocation count scales **linearly with the number of audiences** (702 ÷ 246 ≈ 2.85× for 3×), which confirms the per-audience-per-call construction is the driver.
 
-Key sites from `go tool pprof -alloc_space heap-dumps/jwt-auth.out`:
+Key sites from `go tool pprof -alloc_space` heap-dumps/jwt-auth.out:
 
 | Site                                                   | MB   | % total          |
 |--------------------------------------------------------|------|------------------|
@@ -48,27 +48,39 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 
 - **Repository Type**: Single-Product
 - **Technology Stack**: Go, `github.com/lestrrat-go/jwx/v2`
-- **Affected files**: `internal/jwtsupport/jwt.go`
-- **Key type**: `JWTSupport` struct in `internal/jwtsupport/jwt.go`
+- **Affected files**: [internal/jwtsupport/jwt.go](internal/jwtsupport/jwt.go)
+- **Key type**: `JWTSupport` struct in [internal/jwtsupport/jwt.go](internal/jwtsupport/jwt.go)
 - **Key method**: `Authenticate()` — inner loop starting at `for _, aud := range j.audiences`
 
 ## 2. Implementation Steps
 
+### Preparation — Baseline Recording
+
+- **GOAL-001**: Record a before-snapshot immediately before making any code changes.
+
+- **TASK-001**: Record a before-snapshot immediately before making any code changes `[📋 Planned]`
+  - Command:
+    ```
+    ./e2e-tests/bench-snapshot.sh --label=before-jwt-opts
+    ```
+  - This writes profiles and a summary to heap-dumps/<timestamp>_before-jwt-opts.*
+  - Note the exact prefix printed by the script — it is needed in TASK-006
+
 ### Implementation Phase 1 — Data structure
 
-- **GOAL-001**: Add a field to `JWTSupport` that holds pre-built parse option slices indexed by issuer and audience.
+- **GOAL-002**: Add a field to `JWTSupport` that holds pre-built parse option slices indexed by issuer and audience.
 
-- **TASK-001**: Add `parseopts` field to `JWTSupport` struct `[📋 Planned]`
-  - File: `internal/jwtsupport/jwt.go`
+- **TASK-002**: Add `parseopts` field to `JWTSupport` struct `[📋 Planned]`
+  - File: [internal/jwtsupport/jwt.go](internal/jwtsupport/jwt.go)
   - Add field: `parseopts [][]jwt.ParseOption` — outer index = well-known issuer index, inner index = audience index
   - The slice is populated in Phase 2 and consumed in Phase 3
 
 ### Implementation Phase 2 — Construction
 
-- **GOAL-002**: Populate `parseopts` after JWKS loading is complete so all key material is available.
+- **GOAL-003**: Populate `parseopts` after JWKS loading is complete so all key material is available.
 
-- **TASK-002**: Add `buildParseOptions()` method to `JWTSupport` `[📋 Planned]`
-  - File: `internal/jwtsupport/jwt.go`
+- **TASK-003**: Add `buildParseOptions()` method to `JWTSupport` `[📋 Planned]`
+  - File: [internal/jwtsupport/jwt.go](internal/jwtsupport/jwt.go)
   - Signature: `func (j *JWTSupport) buildParseOptions()`
   - For each well-known index `i` and each audience `aud`:
     - If `j.wellknownList[i].isLocalFile`: build key option from `j.JWKS[i]` using same single-key / keyset branch as current `Authenticate()`
@@ -80,27 +92,36 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 
 ### Implementation Phase 3 — Use pre-built options
 
-- **GOAL-003**: Replace the per-call option construction in `Authenticate()` with a lookup into `j.parseopts`.
+- **GOAL-004**: Replace the per-call option construction in `Authenticate()` with a lookup into `j.parseopts`.
 
-- **TASK-003**: Simplify the inner loop in `Authenticate()` `[📋 Planned]`
-  - File: `internal/jwtsupport/jwt.go`
+- **TASK-004**: Simplify the inner loop in `Authenticate()` `[📋 Planned]`
+  - File: [internal/jwtsupport/jwt.go](internal/jwtsupport/jwt.go)
   - Replace the block that builds `var options []jwt.ParseOption` with a lookup: `options := j.parseopts[i][audIndex]`
   - For HTTP-cached issuers: prepend a fresh `jwt.WithKeySet(ks)` option to a copy of the base slice (the live JWKS snapshot must still be injected per-call; only the static options are pre-built)
   - Result: static options are never re-allocated; only the per-call HTTP key option is allocated when needed
 
 ### Implementation Phase 4 — Verification
 
-- **GOAL-004**: Confirm measurable allocation reduction.
-
-- **TASK-004**: Run benchmarks before and after `[📋 Planned]`
-  - Commands:
-    ```
-    go test -run='^$' -bench='^BenchmarkAuthenticate' -benchmem ./internal/jwtsupport/ 2>/dev/null
-    ```
-  - Expected: `allocs/op` decreases for both single-audience and multi-audience variants; multi-audience reduction should be proportionally larger
+- **GOAL-005**: Confirm measurable allocation reduction using the snapshot script so results are reproducible and comparable.
 
 - **TASK-005**: Run full test suite `[📋 Planned]`
   - Command: `go test ./...`
+  - Run this after the code changes in Preparation and Phases 1–3 are complete
+
+- **TASK-006**: Record an after-snapshot and compare `[📋 Planned]`
+  - Command:
+    ```
+    ./e2e-tests/bench-snapshot.sh --label=after-jwt-opts
+    ```
+  - Compare the raw numbers in the two .bench.txt files:
+    - `BenchmarkAuthenticate-N`: expected reduction in `allocs/op`
+    - `BenchmarkAuthenticate_MultipleAudiences-N`: expected proportionally larger reduction
+  - Diff the pprof profiles interactively to confirm `lestrrat-go/option.New` sites shrink:
+    ```
+    go tool pprof -diff_base heap-dumps/<before>.jwt-auth.out heap-dumps/<after>.jwt-auth.out
+    go tool pprof -diff_base heap-dumps/<before>.jwt-multi.out heap-dumps/<after>.jwt-multi.out
+    ```
+  - Acceptance: `allocs/op` decreases for both benchmark variants; `lestrrat-go/option.New` is no longer in the pprof top-20 for the file-based issuer path
 
 ## 3. Alternatives
 
@@ -114,8 +135,8 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 
 ## 5. Files
 
-- **FILE-001**: `internal/jwtsupport/jwt.go` — `JWTSupport` struct, `New()`, new `buildParseOptions()`, `Authenticate()`
-- **FILE-002**: `internal/jwtsupport/jwt_test.go` — existing tests must pass; benchmarks already present
+- **FILE-001**: [internal/jwtsupport/jwt.go](internal/jwtsupport/jwt.go) — `JWTSupport` struct, `New()`, new `buildParseOptions()`, `Authenticate()`
+- **FILE-002**: [internal/jwtsupport/jwt_test.go](internal/jwtsupport/jwt_test.go) — existing tests must pass; benchmarks already present
 
 ## 6. Testing
 
@@ -132,4 +153,4 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 ## 8. Related Specifications / Further Reading
 
 [lestrrat-go/jwx v2 jwt.ParseOption](https://pkg.go.dev/github.com/lestrrat-go/jwx/v2/jwt#ParseOption)
-[Benchmark profile — JWT auth top allocators](heap-dumps/jwt-auth.out) (local, generated during investigation)
+Benchmark profile — JWT auth top allocators: heap-dumps/jwt-auth.out (local, generated during investigation)

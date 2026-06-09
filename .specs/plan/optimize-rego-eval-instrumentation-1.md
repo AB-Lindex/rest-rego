@@ -17,18 +17,18 @@ Adding `rego.EvalInstrument(false)` to the `Eval()` call inside `regocache.Valid
 
 **Measured baseline** (arm64, `BenchmarkValidate`):
 
-| Variant | ns/op | B/op | allocs/op |
-|---|---|---|---|
-| Simple policy | 22 878 | 10 766 | 204 |
-| Large input | 30 134 | 14 953 | 320 |
+| Variant       | ns/op  | B/op   | allocs/op |
+|---------------|--------|--------|-----------|
+| Simple policy | 22 878 | 10 766 | 204       |
+| Large input   | 30 134 | 14 953 | 320       |
 
 Top allocating sites from `go tool pprof -alloc_space`:
 
-| Site | MB | % total |
-|---|---|---|
-| `rego.preparedQuery.newEvalContext` | 334 | 52% |
-| `metrics.(*metrics).Timer` | 22 | 3.5% |
-| `metrics.New` | 11.5 | 1.8% |
+| Site                                | MB   | % total |
+|-------------------------------------|------|---------|
+| `rego.preparedQuery.newEvalContext` | 334  | 52%     |
+| `metrics.(*metrics).Timer`          | 22   | 3.5%    |
+| `metrics.New`                       | 11.5 | 1.8%    |
 
 ## 1. Requirements & Constraints
 
@@ -50,28 +50,50 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 
 ## 2. Implementation Steps
 
-### Implementation Phase 1 — Code change
+### Implementation Phase 1 — Pre-change Baseline
 
-- **GOAL-001**: Add `rego.EvalInstrument(false)` to the `query.Eval()` call in `Validate()`.
+- **GOAL-001**: Record a baseline of allocations and performance before any code changes are made to ensure comparability.
 
-- **TASK-001**: Edit `pkg/regocache/rego.go` — `Validate()` method `[📋 Planned]`
+- **TASK-001**: Record a before-snapshot immediately before making any code changes `[📋 Planned]`
+  - Command:
+    ```
+    ./e2e-tests/bench-snapshot.sh --label=before-rego-instrument
+    ```
+  - This writes profiles and a summary to `heap-dumps/<timestamp>_before-rego-instrument.*`
+  - Note the exact prefix printed by the script — it is needed in TASK-004
+
+### Implementation Phase 2 — Code change
+
+- **GOAL-002**: Add `rego.EvalInstrument(false)` to the `query.Eval()` call in `Validate()`.
+
+- **TASK-002**: Edit `pkg/regocache/rego.go` — `Validate()` method `[📋 Planned]`
   - File: `pkg/regocache/rego.go`
   - Locate the line: `rs, err := query.Eval(context.Background(), rego.EvalInput(input), rego.EvalPrintHook(r))`
   - Change to: `rs, err := query.Eval(context.Background(), rego.EvalInput(input), rego.EvalPrintHook(r), rego.EvalInstrument(false))`
   - No other changes needed
 
-### Implementation Phase 2 — Verification
+### Implementation Phase 3 — Verification & Comparison
 
-- **GOAL-002**: Confirm allocation reduction with benchmarks.
+- **GOAL-003**: Confirm correctness and verify allocation reduction using the snapshot script so results are reproducible and comparable.
 
-- **TASK-002**: Run benchmarks before and after and record results `[📋 Planned]`
-  - Command: `go test -run='^$' -bench='^BenchmarkValidate' -benchmem ./pkg/regocache/ 2>/dev/null`
-  - Expected: `B/op` and `allocs/op` decrease; `ns/op` may decrease slightly or stay similar
-  - Acceptance: at minimum `newEvalContext`-attributed bytes disappear from `pprof -alloc_space` top-20
-
-- **TASK-003**: Run full test suite `[📋 Planned]`
+- **TASK-003**: Run full test suite after the code change in Phase 2 `[📋 Planned]`
   - Command: `go test ./...`
   - Expected: all tests pass
+
+- **TASK-004**: Record an after-snapshot and compare `[📋 Planned]`
+  - Command:
+    ```
+    ./e2e-tests/bench-snapshot.sh --label=after-rego-instrument
+    ```
+  - Compare the raw numbers in the two `.bench.txt` files:
+    - `BenchmarkValidate-N`: expected reduction in `B/op` and `allocs/op`
+    - `BenchmarkValidate_LargeInput-N`: expected similar proportional reduction
+  - Diff the pprof profiles interactively to confirm `newEvalContext` and `metrics.*` sites shrink:
+    ```
+    go tool pprof -diff_base heap-dumps/<before>.rego.out heap-dumps/<after>.rego.out
+    go tool pprof -diff_base heap-dumps/<before>.rego-large.out heap-dumps/<after>.rego-large.out
+    ```
+  - Acceptance: `rego.preparedQuery.newEvalContext`, `metrics.(*metrics).Timer`, and `metrics.New` are no longer in the pprof top-20
 
 ## 3. Alternatives
 
@@ -89,7 +111,7 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 ## 6. Testing
 
 - **TEST-001**: `go test ./pkg/regocache/...` — all existing unit tests
-- **TEST-002**: `go test -bench='^BenchmarkValidate' -benchmem ./pkg/regocache/` — before/after allocation comparison
+- **TEST-002**: `./e2e-tests/bench-snapshot.sh --label=before-rego-instrument` before the change, then `--label=after-rego-instrument` after; compare `.rego.out` and `.rego-large.out` profiles with `pprof -diff_base`
 
 ## 7. Risks & Assumptions
 

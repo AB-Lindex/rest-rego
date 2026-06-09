@@ -1,0 +1,63 @@
+# https://taskfile.dev
+
+version: '3'
+
+# JWT memory-leak investigation scenario.
+#
+# Prerequisites: build the binaries first with `task build` from the repo root.
+#
+# Workflow:
+#   1. terminal A: task helpers    (starts backend + OIDC helper)
+#   2. terminal B: task restrego   (starts rest-rego proxy)
+#   3. terminal C: task memleak    (runs k6 soak + heap check)
+#
+# For pprof heap profiles, swap `task restrego` for `task restrego-pprof`
+# and pass --pprof=jwt-investigate to memleak.
+
+tasks:
+  helpers:
+    desc: Start mock backend and OIDC token helper for the JWT scenario
+    cmds:
+      - go run github.com/AB-Lindex/rest-rego/e2e-tests/jwt/helpers
+
+  restrego:
+    desc: Start rest-rego proxy for the JWT scenario (requires helpers to be running)
+    dir: ../..
+    preconditions:
+      - test -f ./bin/restrego || (echo "run 'task build' first to compile the restrego binary" && exit 1)
+    env:
+      WELLKNOWN_OIDC: http://127.0.0.1:18305/.well-known/openid-configuration
+      JWT_AUDIENCES: jwt-e2e-test
+      BACKEND_HOST: 127.0.0.1
+      BACKEND_PORT: "18304"
+      LISTEN_ADDR: :18301
+      MGMT_ADDR: :18303
+      POLICY_DIR: e2e-tests/jwt/policies
+    vars:
+      BIN: '{{default "./bin/restrego" .BIN}}'
+    cmds:
+      - "{{.BIN}}"
+
+  restrego-pprof:
+    desc: Start rest-rego proxy (pprof build) for the JWT scenario - pprof available on :6060
+    preconditions:
+      - test -f ../../bin/restrego-pprof || (echo "run 'task build' first to compile the restrego-pprof binary" && exit 1)
+    cmds:
+      - task: restrego
+        vars:
+          BIN: ./bin/restrego-pprof
+
+  memleak:
+    desc: Run k6 soak test and check for heap growth above threshold
+    dir: ../..
+    vars:
+      PPROF_ARGS: '{{if .PPROF}}--pprof={{.PPROF}} --pprof-url=http://localhost:6060{{end}}'
+    cmds:
+      - |
+        bash e2e-tests/memleak.sh \
+          http://127.0.0.1:18303 \
+          http://127.0.0.1:18301 \
+          e2e-tests/jwt/k6/jwt-allow.js \
+          --token-url=http://127.0.0.1:18305/token \
+          --threshold-mb=50 \
+          {{.PPROF_ARGS}}

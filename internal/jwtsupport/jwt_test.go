@@ -888,6 +888,186 @@ func TestAuthenticate_FileBasedKeys_InvalidToken(t *testing.T) {
 	}
 }
 
+// BenchmarkAuthenticate measures per-request allocations in the JWT authentication path.
+//
+// Investigation: suspected memory growth under sustained JWT load. Run with:
+//
+//	go test -bench=BenchmarkAuthenticate -benchmem -memprofile=mem.out ./internal/jwtsupport/
+//	go tool pprof -alloc_space mem.out
+func BenchmarkAuthenticate(b *testing.B) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		b.Fatalf("Failed to generate RSA key pair: %v", err)
+	}
+
+	publicJWK, err := jwk.FromRaw(&privateKey.PublicKey)
+	if err != nil {
+		b.Fatalf("Failed to create JWK from public key: %v", err)
+	}
+	if err := publicJWK.Set(jwk.KeyIDKey, "bench-key-1"); err != nil {
+		b.Fatalf("Failed to set key ID: %v", err)
+	}
+	if err := publicJWK.Set(jwk.AlgorithmKey, jwa.RS256); err != nil {
+		b.Fatalf("Failed to set algorithm: %v", err)
+	}
+
+	set := jwk.NewSet()
+	if err := set.AddKey(publicJWK); err != nil {
+		b.Fatalf("Failed to add key to set: %v", err)
+	}
+
+	jwksJSON, err := json.Marshal(set)
+	if err != nil {
+		b.Fatalf("Failed to marshal JWKS: %v", err)
+	}
+
+	tmpDir := b.TempDir()
+	jwksPath := filepath.Join(tmpDir, "jwks.json")
+	wellKnownPath := filepath.Join(tmpDir, "well-known.json")
+
+	if err := os.WriteFile(jwksPath, jwksJSON, 0644); err != nil {
+		b.Fatalf("Failed to write JWKS file: %v", err)
+	}
+	wellKnownJSON := `{
+		"jwks_uri": "file://` + jwksPath + `",
+		"id_token_signing_alg_values_supported": ["RS256"]
+	}`
+	if err := os.WriteFile(wellKnownPath, []byte(wellKnownJSON), 0644); err != nil {
+		b.Fatalf("Failed to write well-known file: %v", err)
+	}
+
+	j := &JWTSupport{
+		wellKnowns:  []string{"file://" + wellKnownPath},
+		audienceKey: "aud",
+		audiences:   []string{"bench-audience"},
+		authKind:    "bearer",
+		permissive:  false,
+	}
+	j.LoadWellKnowns()
+	j.LoadJWKS()
+
+	// Build a valid, long-lived token once – we want to benchmark the validation
+	// path, not token signing.
+	tok := jwt.New()
+	_ = tok.Set(jwt.AudienceKey, "bench-audience")
+	_ = tok.Set(jwt.SubjectKey, "bench-user")
+	_ = tok.Set(jwt.IssuedAtKey, time.Now().Unix())
+	_ = tok.Set(jwt.ExpirationKey, time.Now().Add(24*time.Hour).Unix())
+
+	privateJWK, _ := jwk.FromRaw(privateKey)
+	_ = privateJWK.Set(jwk.KeyIDKey, "bench-key-1")
+	signedToken, err := jwt.Sign(tok, jwt.WithKey(jwa.RS256, privateJWK))
+	if err != nil {
+		b.Fatalf("Failed to sign token: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", "http://example.com/bench", nil)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		info := &types.Info{
+			Request: types.RequestInfo{
+				Auth: &types.RequestAuth{
+					Kind:  "bearer",
+					Token: string(signedToken),
+				},
+			},
+		}
+		if err := j.Authenticate(info, req); err != nil {
+			b.Fatalf("iteration %d: Authenticate() error: %v", i, err)
+		}
+	}
+}
+
+// BenchmarkAuthenticate_MultipleAudiences benchmarks the authentication path when
+// multiple audiences are configured, which exercises the inner loop allocation
+// pattern more heavily.
+func BenchmarkAuthenticate_MultipleAudiences(b *testing.B) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		b.Fatalf("Failed to generate RSA key pair: %v", err)
+	}
+
+	publicJWK, err := jwk.FromRaw(&privateKey.PublicKey)
+	if err != nil {
+		b.Fatalf("Failed to create JWK from public key: %v", err)
+	}
+	if err := publicJWK.Set(jwk.KeyIDKey, "bench-key-1"); err != nil {
+		b.Fatalf("Failed to set key ID: %v", err)
+	}
+	if err := publicJWK.Set(jwk.AlgorithmKey, jwa.RS256); err != nil {
+		b.Fatalf("Failed to set algorithm: %v", err)
+	}
+
+	set := jwk.NewSet()
+	if err := set.AddKey(publicJWK); err != nil {
+		b.Fatalf("Failed to add key to set: %v", err)
+	}
+
+	jwksJSON, err := json.Marshal(set)
+	if err != nil {
+		b.Fatalf("Failed to marshal JWKS: %v", err)
+	}
+
+	tmpDir := b.TempDir()
+	jwksPath := filepath.Join(tmpDir, "jwks.json")
+	wellKnownPath := filepath.Join(tmpDir, "well-known.json")
+
+	if err := os.WriteFile(jwksPath, jwksJSON, 0644); err != nil {
+		b.Fatalf("Failed to write JWKS file: %v", err)
+	}
+	wellKnownJSON := `{
+		"jwks_uri": "file://` + jwksPath + `",
+		"id_token_signing_alg_values_supported": ["RS256"]
+	}`
+	if err := os.WriteFile(wellKnownPath, []byte(wellKnownJSON), 0644); err != nil {
+		b.Fatalf("Failed to write well-known file: %v", err)
+	}
+
+	j := &JWTSupport{
+		wellKnowns:  []string{"file://" + wellKnownPath},
+		audienceKey: "aud",
+		// Three audiences → three jwt.ParseOption slices built per request
+		audiences:  []string{"audience-a", "audience-b", "bench-audience"},
+		authKind:   "bearer",
+		permissive: false,
+	}
+	j.LoadWellKnowns()
+	j.LoadJWKS()
+
+	tok := jwt.New()
+	_ = tok.Set(jwt.AudienceKey, "bench-audience")
+	_ = tok.Set(jwt.SubjectKey, "bench-user")
+	_ = tok.Set(jwt.IssuedAtKey, time.Now().Unix())
+	_ = tok.Set(jwt.ExpirationKey, time.Now().Add(24*time.Hour).Unix())
+
+	privateJWK, _ := jwk.FromRaw(privateKey)
+	_ = privateJWK.Set(jwk.KeyIDKey, "bench-key-1")
+	signedToken, err := jwt.Sign(tok, jwt.WithKey(jwa.RS256, privateJWK))
+	if err != nil {
+		b.Fatalf("Failed to sign token: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", "http://example.com/bench", nil)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		info := &types.Info{
+			Request: types.RequestInfo{
+				Auth: &types.RequestAuth{
+					Kind:  "bearer",
+					Token: string(signedToken),
+				},
+			},
+		}
+		if err := j.Authenticate(info, req); err != nil {
+			b.Fatalf("iteration %d: Authenticate() error: %v", i, err)
+		}
+	}
+}
+
 // TestAuthenticate_FileBasedKeys_WrongAudience tests that tokens with wrong audience are rejected
 func TestAuthenticate_FileBasedKeys_WrongAudience(t *testing.T) {
 	// Generate RSA key pair

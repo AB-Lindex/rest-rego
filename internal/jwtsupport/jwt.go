@@ -287,7 +287,8 @@ func (j *JWTSupport) Authenticate(info *types.Info, r *http.Request) error {
 			}
 
 			// SUCCESS: Valid token
-			fields, _ := token.AsMap(context.Background())
+			// Use request context so claim extraction is bounded to request lifetime.
+			fields, _ := token.AsMap(r.Context())
 			info.JWT = fields
 			slog.Info("jwtsupport: authentication successful", "aud", aud)
 			return nil

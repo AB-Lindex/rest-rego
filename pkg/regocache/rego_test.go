@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func writePolicy(t *testing.T, dir, name, content string) {
+func writePolicy(t testing.TB, dir, name, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write policy %s: %v", name, err)
@@ -172,5 +172,122 @@ default allow := true
 	}
 	if m["allow"] != true {
 		t.Errorf("expected allow=true, got %v", m["allow"])
+	}
+}
+
+// BenchmarkValidate measures per-evaluation allocations in the OPA policy path.
+//
+// Investigation: OPA's PreparedEvalQuery.Eval is suspected to accumulate internal
+// state under sustained load. Run with:
+//
+//	go test -bench=BenchmarkValidate -benchmem -memprofile=mem.out ./pkg/regocache/
+//	go tool pprof -alloc_space mem.out
+func BenchmarkValidate(b *testing.B) {
+	tmpDir := b.TempDir()
+
+	const policyFile = "request.rego"
+	writePolicy(b, tmpDir, policyFile, `package testpkg
+
+default allow := false
+
+allow if {
+	input.request.method == "GET"
+	input.jwt.sub != ""
+}
+`)
+
+	rc, err := New(tmpDir, "*.rego", false, policyFile)
+	if err != nil {
+		b.Fatalf("New() failed: %v", err)
+	}
+	b.Cleanup(func() { rc.Close() })
+	rc.Watch()
+
+	input := map[string]any{
+		"request": map[string]any{
+			"method": "GET",
+			"path":   []string{"api", "v1", "resource"},
+		},
+		"jwt": map[string]any{
+			"sub": "user-123",
+			"aud": "my-service",
+		},
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		result, err := rc.Validate(policyFile, input)
+		if err != nil {
+			b.Fatalf("Validate() error: %v", err)
+		}
+		m, ok := result.(map[string]any)
+		if !ok {
+			b.Fatalf("result is not a map: %T", result)
+		}
+		if m["allow"] != true {
+			b.Fatalf("expected allow=true, got %v", m["allow"])
+		}
+	}
+}
+
+// BenchmarkValidate_LargeInput benchmarks policy evaluation with a larger input
+// that is closer to real-world JWT + request data, to surface any input marshalling
+// or binding allocations that scale with input size.
+func BenchmarkValidate_LargeInput(b *testing.B) {
+	tmpDir := b.TempDir()
+
+	const policyFile = "request.rego"
+	writePolicy(b, tmpDir, policyFile, `package testpkg
+
+default allow := false
+
+allow if {
+	input.request.method == "GET"
+	input.jwt.sub != ""
+	input.jwt.roles[_] == "reader"
+}
+`)
+
+	rc, err := New(tmpDir, "*.rego", false, policyFile)
+	if err != nil {
+		b.Fatalf("New() failed: %v", err)
+	}
+	b.Cleanup(func() { rc.Close() })
+	rc.Watch()
+
+	input := map[string]any{
+		"request": map[string]any{
+			"method":  "GET",
+			"path":    []string{"api", "v1", "resource", "items"},
+			"headers": map[string]any{"content-type": "application/json", "x-request-id": "abc-123"},
+			"id":      "req-abc-123",
+		},
+		"jwt": map[string]any{
+			"sub":   "user-123",
+			"aud":   []string{"my-service", "other-service"},
+			"iss":   "https://auth.example.com",
+			"email": "user@example.com",
+			"roles": []string{"reader", "viewer"},
+			"name":  "Test User",
+			"iat":   1700000000,
+			"exp":   1700003600,
+		},
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		result, err := rc.Validate(policyFile, input)
+		if err != nil {
+			b.Fatalf("Validate() error: %v", err)
+		}
+		m, ok := result.(map[string]any)
+		if !ok {
+			b.Fatalf("result is not a map: %T", result)
+		}
+		if m["allow"] != true {
+			b.Fatalf("expected allow=true, got %v", m["allow"])
+		}
 	}
 }

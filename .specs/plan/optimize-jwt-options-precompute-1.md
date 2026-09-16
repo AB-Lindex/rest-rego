@@ -58,19 +58,20 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 
 - **GOAL-001**: Record a before-snapshot immediately before making any code changes.
 
-- **TASK-001**: Record a before-snapshot immediately before making any code changes `[📋 Planned]`
+- **TASK-001**: Record a before-snapshot immediately before making any code changes `[✅ Completed: 2026-06-09]`
   - Command:
     ```
     ./e2e-tests/bench-snapshot.sh --label=before-jwt-opts
     ```
   - This writes profiles and a summary to heap-dumps/<timestamp>_before-jwt-opts.*
   - Note the exact prefix printed by the script — it is needed in TASK-006
+    Prefix: '20260609_211525'
 
 ### Implementation Phase 1 — Data structure
 
 - **GOAL-002**: Add a field to `JWTSupport` that holds pre-built parse option slices indexed by issuer and audience.
 
-- **TASK-002**: Add `parseopts` field to `JWTSupport` struct `[📋 Planned]`
+- **TASK-002**: Add `parseopts` field to `JWTSupport` struct `[✅ Completed: 2026-06-09]`
   - File: [internal/jwtsupport/jwt.go](internal/jwtsupport/jwt.go)
   - Add field: `parseopts [][]jwt.ParseOption` — outer index = well-known issuer index, inner index = audience index
   - The slice is populated in Phase 2 and consumed in Phase 3
@@ -79,7 +80,7 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 
 - **GOAL-003**: Populate `parseopts` after JWKS loading is complete so all key material is available.
 
-- **TASK-003**: Add `buildParseOptions()` method to `JWTSupport` `[📋 Planned]`
+- **TASK-003**: Add `buildParseOptions()` method to `JWTSupport` `[✅ Completed: 2026-06-09]`
   - File: [internal/jwtsupport/jwt.go](internal/jwtsupport/jwt.go)
   - Signature: `func (j *JWTSupport) buildParseOptions()`
   - For each well-known index `i` and each audience `aud`:
@@ -94,7 +95,7 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 
 - **GOAL-004**: Replace the per-call option construction in `Authenticate()` with a lookup into `j.parseopts`.
 
-- **TASK-004**: Simplify the inner loop in `Authenticate()` `[📋 Planned]`
+- **TASK-004**: Simplify the inner loop in `Authenticate()` `[✅ Completed: 2026-06-09]`
   - File: [internal/jwtsupport/jwt.go](internal/jwtsupport/jwt.go)
   - Replace the block that builds `var options []jwt.ParseOption` with a lookup: `options := j.parseopts[i][audIndex]`
   - For HTTP-cached issuers: prepend a fresh `jwt.WithKeySet(ks)` option to a copy of the base slice (the live JWKS snapshot must still be injected per-call; only the static options are pre-built)
@@ -104,11 +105,11 @@ Update the status tag on each task (`[📋 Planned]` → `[⏳ In Progress]` →
 
 - **GOAL-005**: Confirm measurable allocation reduction using the snapshot script so results are reproducible and comparable.
 
-- **TASK-005**: Run full test suite `[📋 Planned]`
+- **TASK-005**: Run full test suite `[✅ Completed: 2026-06-09]`
   - Command: `go test ./...`
   - Run this after the code changes in Preparation and Phases 1–3 are complete
 
-- **TASK-006**: Record an after-snapshot and compare `[📋 Planned]`
+- **TASK-006**: Record an after-snapshot and compare `[✅ Completed: 2026-06-10]`
   - Command:
     ```
     ./e2e-tests/bench-snapshot.sh --label=after-jwt-opts

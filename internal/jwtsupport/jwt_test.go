@@ -666,6 +666,7 @@ func TestAuthenticate_FileBasedKeys(t *testing.T) {
 	// Load well-known and JWKS
 	j.LoadWellKnowns()
 	j.LoadJWKS()
+	j.buildParseOptions()
 
 	// Verify JWKS loaded
 	if len(j.JWKS) != 1 {
@@ -832,6 +833,7 @@ func TestAuthenticate_FileBasedKeys_InvalidToken(t *testing.T) {
 	// Load well-known and JWKS
 	j.LoadWellKnowns()
 	j.LoadJWKS()
+	j.buildParseOptions()
 
 	// Test with various invalid tokens
 	testCases := []struct {
@@ -945,6 +947,7 @@ func BenchmarkAuthenticate(b *testing.B) {
 	}
 	j.LoadWellKnowns()
 	j.LoadJWKS()
+	j.buildParseOptions()
 
 	// Build a valid, long-lived token once – we want to benchmark the validation
 	// path, not token signing.
@@ -1035,6 +1038,7 @@ func BenchmarkAuthenticate_MultipleAudiences(b *testing.B) {
 	}
 	j.LoadWellKnowns()
 	j.LoadJWKS()
+	j.buildParseOptions()
 
 	tok := jwt.New()
 	_ = tok.Set(jwt.AudienceKey, "bench-audience")
@@ -1133,6 +1137,7 @@ func TestAuthenticate_FileBasedKeys_WrongAudience(t *testing.T) {
 	// Load well-known and JWKS
 	j.LoadWellKnowns()
 	j.LoadJWKS()
+	j.buildParseOptions()
 
 	// Create a JWT token with WRONG audience
 	token := jwt.New()

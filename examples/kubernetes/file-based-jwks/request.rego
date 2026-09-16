@@ -8,9 +8,9 @@ default allow := false
 # - The JWT was successfully parsed and verified by rest-rego
 # - The JWT has required standard claims (issuer, subject, expiration)
 allow if {
-	input.jwt.iss  # Issuer claim exists
-	input.jwt.sub  # Subject claim exists
-	input.jwt.exp  # Expiration claim exists
+	input.jwt.iss # Issuer claim exists
+	input.jwt.sub # Subject claim exists
+	input.jwt.exp # Expiration claim exists
 }
 
 # Allow public health check endpoints without authentication

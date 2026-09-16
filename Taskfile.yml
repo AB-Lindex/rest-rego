@@ -73,6 +73,11 @@ tasks:
           docker.io/aquasec/trivy:latest
           image --config /trivy.yaml --input /image.tar
       - rm -f /tmp/trivy-scan-image.tar
+
+  cleanup:
+    desc: Clean up temporary files and directories
+    cmds:
+      - rm -rf ./temp/trivy-db
   
   run-azure:
     desc: Run the restrego using Azure OIDC

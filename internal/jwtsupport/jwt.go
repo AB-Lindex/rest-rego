@@ -26,6 +26,7 @@ type JWTSupport struct {
 	cache         *jwk.Cache
 	JWKS          []jwk.Set
 	permissive    bool // true = treat auth failures as anonymous
+	parseopts     [][][]jwt.ParseOption
 }
 
 var algConverter sync.Map
@@ -99,7 +100,49 @@ func New(wellKnowns []string, audKey string, audList []string, kind string, perm
 		os.Exit(1)
 	}
 
+	j.buildParseOptions()
+
 	return j
+}
+
+func (j *JWTSupport) buildParseOptions() {
+	if len(j.wellknownList) == 0 {
+		return
+	}
+	j.parseopts = make([][][]jwt.ParseOption, len(j.wellknownList))
+	for i, wc := range j.wellknownList {
+		j.parseopts[i] = make([][]jwt.ParseOption, len(j.audiences))
+		for audIndex, aud := range j.audiences {
+			var options []jwt.ParseOption
+			if wc.isLocalFile {
+				if i < len(j.JWKS) {
+					ks := j.JWKS[i]
+					if ks.Len() == 1 {
+						if key, ok := ks.Key(0); ok {
+							options = append(options, jwt.WithKey(key.Algorithm(), key))
+						}
+					} else {
+						options = append(options, jwt.WithKeySet(ks))
+					}
+				} else {
+					options = append(options, jwt.WithKeySet(nil))
+				}
+			} else {
+				options = append(options, jwt.WithKeySet(nil))
+			}
+
+			options = append(options, jwt.WithValidate(true))
+			options = append(options, jwt.WithVerify(true))
+
+			if j.audienceKey == "aud" {
+				options = append(options, jwt.WithAudience(aud))
+			} else {
+				options = append(options, jwt.WithClaimValue(j.audienceKey, aud))
+			}
+
+			j.parseopts[i][audIndex] = options
+		}
+	}
 }
 
 func (j *JWTSupport) LoadWellKnowns() {
@@ -258,25 +301,19 @@ func (j *JWTSupport) Authenticate(info *types.Info, r *http.Request) error {
 			}
 		}
 
-		for _, aud := range j.audiences {
+		for audIndex, aud := range j.audiences {
 			slog.Debug("jwtsupport: validating token", "issuer", wc.JwksURI, "aud", aud)
 
 			var options []jwt.ParseOption
-			if ks.Len() == 1 {
-				if key, ok := ks.Key(0); ok {
-					options = append(options, jwt.WithKey(key.Algorithm(), key))
-				}
+			if wc.isLocalFile {
+				options = j.parseopts[i][audIndex]
 			} else {
-				options = append(options, jwt.WithKeySet(ks))
-			}
-
-			options = append(options, jwt.WithValidate(true))
-			options = append(options, jwt.WithVerify(true))
-
-			if j.audienceKey == "aud" {
-				options = append(options, jwt.WithAudience(aud))
-			} else {
-				options = append(options, jwt.WithClaimValue(j.audienceKey, aud))
+				// For HTTP-cached issuers, we need to inject the live keyset snapshot reference.
+				// Prepend a fresh jwt.WithKeySet(ks) option to a copy of the pre-built options
+				// (the first element [0] is the nil/static placeholder WithKeySet).
+				options = make([]jwt.ParseOption, len(j.parseopts[i][audIndex]))
+				copy(options, j.parseopts[i][audIndex])
+				options[0] = jwt.WithKeySet(ks)
 			}
 
 			token, err := jwt.Parse(request, options...)

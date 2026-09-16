@@ -1,4 +1,3 @@
-package main
 // Package main provides a self-contained helper server for the JWT memory-leak
 // investigation e2e scenario. It acts as:
 //   - The backend that rest-rego proxies to

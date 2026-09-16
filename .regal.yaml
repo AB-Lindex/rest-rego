@@ -2,3 +2,10 @@ rules:
   idiomatic:
     directory-package-mismatch:
       level: ignore
+ignore:
+  files:
+    - e2e-tests/**
+    - examples/**
+    - tests/**
+    - temp/**
+    - heap-dumps/**

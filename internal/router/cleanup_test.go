@@ -13,7 +13,7 @@ import (
 
 func init() {
 	// Initialize metrics for testing
-	metrics.New()
+	metrics.New(nil, 20, "-")
 }
 
 func TestCleanupHandler(t *testing.T) {

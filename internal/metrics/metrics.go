@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/AB-Lindex/rest-rego/internal/types"
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,11 +26,20 @@ var metrics struct {
 	blockedHeadersExposed      prometheus.Gauge
 	blockedHeadersCaptured     prometheus.Counter
 	requestsWithBlockedHeaders prometheus.Counter
+
+	customLabels []string
+	maxLen       int
+	def          string
 }
 
-// New creates a new instance of the metrics
-func New() {
+// New creates a new instance of the metrics. customLabels are additional Prometheus
+// label names populated per-request from policy "labels" results; maxLen and def
+// control sanitisation of their values (see sanitizeLabelValue).
+func New(customLabels []string, maxLen int, def string) {
 	metrics.reg = prometheus.NewRegistry()
+	metrics.customLabels = customLabels
+	metrics.maxLen = maxLen
+	metrics.def = def
 
 	metrics.reg.MustRegister(
 		collectors.NewGoCollector(),
@@ -37,7 +48,7 @@ func New() {
 
 	metrics.buckets = prometheus.ExponentialBuckets(0.1, 1.5, 5)
 
-	labels := []string{"method", "code", "url"}
+	labels := append([]string{"method", "code", "url"}, customLabels...)
 
 	metrics.requestsTotal = promauto.With(metrics.reg).NewCounterVec(
 		prometheus.CounterOpts{
@@ -118,16 +129,35 @@ func Wrap(next http.Handler) http.Handler {
 
 		info := types.GetInfo(r)
 
-		labels := make([]string, 3)
-		labels[0] = r.Method
-		labels[1] = strconv.Itoa(w2.Status())
-		labels[2] = info.URL
+		labels := append(make([]string, 0, 3+len(metrics.customLabels)), r.Method, strconv.Itoa(w2.Status()), info.URL)
+		for _, name := range metrics.customLabels {
+			labels = append(labels, sanitizeLabelValue(info.Labels[name], metrics.maxLen, metrics.def))
+		}
 
 		metrics.requestDuration.WithLabelValues(labels...).Observe(time.Since(now).Seconds())
 		metrics.requestSize.WithLabelValues(labels...).Observe(float64(r.ContentLength))
 		metrics.responseSize.WithLabelValues(labels...).Observe(float64(w2.Size()))
 		metrics.requestsTotal.WithLabelValues(labels...).Inc()
 	})
+}
+
+// sanitizeLabelValue coerces a policy-provided value into a value safe to use as a
+// Prometheus label: only printable ASCII is kept, the result is truncated to maxLen,
+// and def is substituted when the sanitised result is empty.
+func sanitizeLabelValue(v string, maxLen int, def string) string {
+	buf := make([]byte, 0, len(v))
+	for _, r := range v {
+		if r < utf8.RuneSelf && unicode.IsPrint(r) {
+			buf = append(buf, byte(r))
+			if len(buf) >= maxLen {
+				break
+			}
+		}
+	}
+	if len(buf) == 0 {
+		return def
+	}
+	return string(buf)
 }
 
 // SetBlockedHeadersExposed sets the gauge value indicating if blocked headers feature is enabled

@@ -74,6 +74,17 @@ func (proxy *Proxy) policyHandler(next http.Handler) http.Handler {
 			slog.Debug("router: rewriting URL", "original", r.URL.Path, "new", url)
 		}
 
+		// Handle optional custom metric label values
+		if labels, ok := resultMap["labels"].(map[string]interface{}); ok {
+			result := make(map[string]string, len(labels))
+			for name, value := range labels {
+				if s, ok := value.(string); ok {
+					result[name] = s
+				}
+			}
+			info.Labels = result
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }

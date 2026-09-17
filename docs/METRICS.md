@@ -87,3 +87,63 @@ default url := "/unknown"
 ```
 
 Then add specific rules that return normalised values for each known route pattern.
+
+## Custom Metric Labels
+
+In addition to rewriting the `url` label, you can register your own custom Prometheus labels on all four HTTP request metrics (`http_requests_total`, `http_request_duration_seconds`, `http_request_size_bytes`, `http_response_size_bytes`) and populate their values per-request from your Rego policy. This is useful for segmenting metrics by dimensions such as client version, tenant, or API version.
+
+### Configuration
+
+| Option | Env Variable | Default | Description |
+|--------|--------------|---------|-------------|
+| `--metric-labels` | `METRIC_LABELS` | *(empty)* | Fixed list of custom label names to register on the HTTP request metrics. Empty disables the feature. |
+| `--metric-label-max-length` | `METRIC_LABEL_MAX_LENGTH` | `20` | Maximum length of a custom metric label value, applied globally to every custom label. |
+| `--metric-label-default` | `METRIC_LABEL_DEFAULT` | `-` | Fallback value used when a label is missing, non-string, or empty after sanitisation. |
+
+Label **names** are declared once at startup and validated against the Prometheus label-name grammar (`^[a-zA-Z_][a-zA-Z0-9_]*$`). Names that are invalid, collide with the reserved base labels (`method`, `code`, `url`), or are duplicated cause rest-rego to fail fast (`os.Exit(1)`) at startup — names are never silently sanitised or rewritten.
+
+### The `labels` Policy Result
+
+Your Rego policy supplies per-request label **values** by returning a `labels` object (name → string) in its result:
+
+```rego
+package policies
+
+default allow := false
+default labels := {}
+
+allow if {
+    input.jwt.appid == "11112222-3333-4444-5555-666677778888"
+}
+
+# Expose the client version header as a custom metric label.
+labels := {"client_version": v} if {
+    v := input.request.headers["X-Client-Version"]
+}
+```
+
+With `METRIC_LABELS=client_version`, requests carrying `X-Client-Version: 2.4.1` record `client_version="2.4.1"`; requests without the header record the default value (`client_version="-"`).
+
+Only keys matching a registered label name are used — unregistered keys in the `labels` map are ignored, and a registered name absent from the map (or missing from the policy entirely) resolves to the default value. A policy can never introduce a new label name at runtime.
+
+### Value Sanitisation
+
+Every custom label value is sanitised identically before being recorded:
+
+1. Strip all characters that are not printable ASCII (byte range `0x20`–`0x7E`).
+2. Truncate the result to `METRIC_LABEL_MAX_LENGTH`.
+3. If the result is empty after these steps, substitute `METRIC_LABEL_DEFAULT`.
+
+This prevents attacker-controlled values (e.g. from request headers) from injecting control characters into the metrics exposition format or producing unbounded label lengths.
+
+### High Cardinality Warning
+
+> **Warning:** Custom metric label values are still attacker- or client-influenceable. If a label is allowed to contain a large number of distinct values — such as raw user identifiers or unbounded free-text — the number of unique label combinations will grow without bound, causing the same cardinality problems described in the [URL label warning](#high-cardinality-warning) above: excessive memory usage, slow queries, scrape timeouts, and potential out-of-memory crashes.
+
+Choose custom label values with a small, bounded set of expected values (e.g. a client version scheme, a known tenant list) rather than raw, unbounded user input.
+
+### Related Features
+
+- [Policy-Driven Custom Metric Labels](../.specs/features/policy-driven-metric-labels.md) — feature specification for this capability.
+- [URL Metrics Level](../.specs/features/url-metrics-level.md) — companion cardinality-control feature for the `url` label.
+

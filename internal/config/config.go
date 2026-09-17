@@ -1,15 +1,27 @@
 package config
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/AB-Lindex/rest-rego/internal/types"
 	"github.com/alexflint/go-arg"
 	"github.com/ninlil/envsubst"
 )
+
+// reservedMetricLabelNames are the fixed label names already used by rest-rego's HTTP metrics.
+var reservedMetricLabelNames = map[string]bool{
+	"method": true,
+	"code":   true,
+	"url":    true,
+}
+
+// metricLabelNameRE matches the Prometheus label-name grammar.
+var metricLabelNameRE = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // Fields is the configuration structure
 type Fields struct {
@@ -36,6 +48,9 @@ type Fields struct {
 	EnvsubstPrefix       string   `arg:"--envsubst-prefix,env:ENVSUBST_PREFIX" default:"$" help:"prefix character for env var expansion in policies (one of: $ % & #)" placeholder:"CHAR"`
 	EnvsubstWrapper      string   `arg:"--envsubst-wrapper,env:ENVSUBST_WRAPPER" default:"{" help:"wrapper character for env var expansion in policies (one of: { ( [ <)" placeholder:"CHAR"`
 	URLMetricsLevel      int      `arg:"--url-metrics-level,env:URL_METRICS_LEVEL" default:"0" help:"level of URL detail to include in metrics (<0=full path, 0=none, >0=up to N segments)"`
+	MetricLabels         []string `arg:"--metric-labels,env:METRIC_LABELS" help:"names of custom Prometheus labels populated by policy 'labels' results" placeholder:"NAME"`
+	MetricLabelMaxLength int      `arg:"--metric-label-max-length,env:METRIC_LABEL_MAX_LENGTH" default:"20" help:"maximum length of a custom metric label value"`
+	MetricLabelDefault   string   `arg:"--metric-label-default,env:METRIC_LABEL_DEFAULT" default:"-" help:"default value for a custom metric label when missing or empty"`
 
 	// Timeout configuration for proxy server
 	ReadHeaderTimeout time.Duration `arg:"--read-header-timeout,env:READ_HEADER_TIMEOUT" default:"10s" help:"timeout for reading request headers"`
@@ -70,6 +85,39 @@ func (f *Fields) EnvsubstPrefixRune() rune { return rune(f.EnvsubstPrefix[0]) }
 
 // EnvsubstWrapperRune returns the envsubst wrapper as a rune.
 func (f *Fields) EnvsubstWrapperRune() rune { return rune(f.EnvsubstWrapper[0]) }
+
+// validateMetricLabelsConfig checks the custom metric label configuration and returns
+// an error describing the first problem found, or nil if the configuration is valid.
+func (f *Fields) validateMetricLabelsConfig() error {
+	if f.MetricLabelMaxLength <= 0 {
+		return fmt.Errorf("metric-label-max-length must be > 0, got %d", f.MetricLabelMaxLength)
+	}
+
+	seen := make(map[string]bool, len(f.MetricLabels))
+	for _, name := range f.MetricLabels {
+		if !metricLabelNameRE.MatchString(name) {
+			return fmt.Errorf("metric-labels: invalid label name %q (must match %s)", name, metricLabelNameRE.String())
+		}
+		if reservedMetricLabelNames[name] {
+			return fmt.Errorf("metric-labels: %q collides with a reserved label name", name)
+		}
+		if seen[name] {
+			return fmt.Errorf("metric-labels: duplicate label name %q", name)
+		}
+		seen[name] = true
+	}
+
+	return nil
+}
+
+// validateMetricLabels validates the custom metric label configuration, exiting the
+// process on failure.
+func (f *Fields) validateMetricLabels() {
+	if err := f.validateMetricLabelsConfig(); err != nil {
+		slog.Error("config: invalid metric-labels configuration", "error", err)
+		os.Exit(1)
+	}
+}
 
 // validateTimeouts validates timeout configuration values
 func (f *Fields) validateTimeouts() {
@@ -141,6 +189,9 @@ func New() *Fields {
 	// Validate timeout configuration
 	f.validateTimeouts()
 
+	// Validate custom metric label configuration
+	f.validateMetricLabels()
+
 	authCount := 0
 	if f.AzureTenant != "" {
 		authCount++
@@ -178,6 +229,10 @@ func New() *Fields {
 
 	if f.URLMetricsLevel < 0 {
 		slog.Warn("config: url-metrics-level is negative — full request paths will be used as Prometheus url labels, which may cause unbounded cardinality")
+	}
+
+	if len(f.MetricLabels) > 0 {
+		slog.Warn("config: metric-labels is configured — custom Prometheus labels are populated from policy results, which may cause unbounded cardinality", "labels", f.MetricLabels)
 	}
 
 	return f

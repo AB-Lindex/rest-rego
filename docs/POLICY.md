@@ -26,6 +26,7 @@ Every policy must include:
 ### Optional Elements
 
 - `url` result for customizing URL labels in metrics (e.g., for granularity or GDPR compliance)
+- `labels` result for populating custom Prometheus metric labels declared via `METRIC_LABELS` (see [Custom Metric Labels](#custom-metric-labels-labels-result))
 - Additional helper rules and functions
 - Custom variables for policy results (forwarded as `X-Restrego-*` headers)
 
@@ -254,6 +255,28 @@ url := concat("/", [input.request.path[0], input.request.path[1], ":id"]) if {
   input.request.path[0] == "api"
 }
 ```
+
+### Custom Metric Labels (`labels` result)
+
+In addition to the `url` result, a policy can populate custom Prometheus metric labels by returning a `labels` object (name → string value) in its result. The set of label **names** is fixed at startup via the `METRIC_LABELS` config option; the policy only supplies per-request **values** for those names. See [docs/METRICS.md](METRICS.md#custom-metric-labels) for the full configuration and sanitisation reference.
+
+```rego
+package policies
+
+default allow := false
+default labels := {}
+
+allow if {
+    input.jwt.appid == "11112222-3333-4444-5555-666677778888"
+}
+
+# Expose the client version header as a custom metric label.
+labels := {"client_version": v} if {
+    v := input.request.headers["X-Client-Version"]
+}
+```
+
+With `METRIC_LABELS=client_version`, requests carrying `X-Client-Version: 2.4.1` record `client_version="2.4.1"`; requests without the header record the configured default value (`METRIC_LABEL_DEFAULT`, `"-"` by default). Keys in `labels` that don't match a registered name are ignored.
 
 ### Header Validation
 
@@ -656,6 +679,9 @@ url := sprintf("/%s/:id", [input.request.path[0]]) if {
 - [Authentication Guides](./JWT.md) - JWT, WSO2, and Azure authentication setup
 - [Blocked Headers Feature](./BLOCKED-HEADERS.md) - Multi-layer authorization patterns
 - [Troubleshooting](./TROUBLESHOOTING.md) - Common policy issues and solutions
+- [Metrics](./METRICS.md) - `url` and custom `labels` result fields, cardinality guidance
+- [Policy-Driven Custom Metric Labels](../.specs/features/policy-driven-metric-labels.md) - feature specification for the `labels` result
+- [URL Metrics Level](../.specs/features/url-metrics-level.md) - companion cardinality-control feature for the `url` label
 
 ## External Resources
 

@@ -49,18 +49,18 @@ Update the status of each task below as the plan progresses.
 
 - **GOAL-001**: Add and validate the three new configuration fields.
 
-- **TASK-001**: Add `MetricLabels []string`, `MetricLabelMaxLength int` (default `20`), `MetricLabelDefault string` (default `"-"`) fields to `Fields` in [internal/config/config.go](../../internal/config/config.go), following existing `arg` tag conventions (env: `METRIC_LABELS`, `METRIC_LABEL_MAX_LENGTH`, `METRIC_LABEL_DEFAULT`; flags: `--metric-labels`, `--metric-label-max-length`, `--metric-label-default`). `[📋 Planned]`
+- **TASK-001**: Add `MetricLabels []string`, `MetricLabelMaxLength int` (default `20`), `MetricLabelDefault string` (default `"-"`) fields to `Fields` in [internal/config/config.go](../../internal/config/config.go), following existing `arg` tag conventions (env: `METRIC_LABELS`, `METRIC_LABEL_MAX_LENGTH`, `METRIC_LABEL_DEFAULT`; flags: `--metric-labels`, `--metric-label-max-length`, `--metric-label-default`). `[✅ Completed: 2026-09-16]`
   - Files: `internal/config/config.go`
 
-- **TASK-002**: Add `validateMetricLabels()` method on `Fields` performing: (a) `MetricLabelMaxLength > 0` check (`os.Exit(1)` + `slog.Error` otherwise), (b) per-name grammar check `^[a-zA-Z_][a-zA-Z0-9_]*$`, (c) reserved-name collision check against `method`, `code`, `url`, (d) duplicate-name check within `MetricLabels`. Call it from `New()` alongside `validateEnvsubst()`/`validateTimeouts()`. `[📋 Planned]`
-  - Files: `internal/config/config.go`
-  - Dependencies: TASK-001
-
-- **TASK-003**: In `New()`, emit a `slog.Warn` cardinality warning when `len(f.MetricLabels) > 0`, mirroring the existing `URLMetricsLevel < 0` warning. `[📋 Planned]`
+- **TASK-002**: Add `validateMetricLabels()` method on `Fields` performing: (a) `MetricLabelMaxLength > 0` check (`os.Exit(1)` + `slog.Error` otherwise), (b) per-name grammar check `^[a-zA-Z_][a-zA-Z0-9_]*$`, (c) reserved-name collision check against `method`, `code`, `url`, (d) duplicate-name check within `MetricLabels`. Call it from `New()` alongside `validateEnvsubst()`/`validateTimeouts()`. `[✅ Completed: 2026-09-16]`
   - Files: `internal/config/config.go`
   - Dependencies: TASK-001
 
-- **TASK-004**: Unit tests in `internal/config/config_test.go` (create if absent) covering: valid label names accepted; invalid grammar rejected; reserved-name collision rejected; duplicate names rejected; `MetricLabelMaxLength <= 0` rejected; defaults (`20`, `"-"`) applied when unset. Since `New()` calls `os.Exit(1)` on failure, test the extracted validation logic as a standalone function/method that returns an `error` instead of exiting directly, OR run failure-path assertions in a subprocess per existing Go testing conventions used elsewhere in this repo — inspect `internal/config` for an existing subprocess-test pattern before choosing an approach. `[📋 Planned]`
+- **TASK-003**: In `New()`, emit a `slog.Warn` cardinality warning when `len(f.MetricLabels) > 0`, mirroring the existing `URLMetricsLevel < 0` warning. `[✅ Completed: 2026-09-16]`
+  - Files: `internal/config/config.go`
+  - Dependencies: TASK-001
+
+- **TASK-004**: Unit tests in `internal/config/config_test.go` (create if absent) covering: valid label names accepted; invalid grammar rejected; reserved-name collision rejected; duplicate names rejected; `MetricLabelMaxLength <= 0` rejected; defaults (`20`, `"-"`) applied when unset. Since `New()` calls `os.Exit(1)` on failure, test the extracted validation logic as a standalone function/method that returns an `error` instead of exiting directly, OR run failure-path assertions in a subprocess per existing Go testing conventions used elsewhere in this repo — inspect `internal/config` for an existing subprocess-test pattern before choosing an approach. `[✅ Completed: 2026-09-16]`
   - Files: `internal/config/config_test.go`
   - Dependencies: TASK-001, TASK-002, TASK-003
 
@@ -68,10 +68,10 @@ Update the status of each task below as the plan progresses.
 
 - **GOAL-002**: Carry policy-provided label values from the policy handler to the metrics middleware.
 
-- **TASK-005**: Add `Labels map[string]string` field (tag `json:"-"`) to `Info` in [internal/types/request.go](../../internal/types/request.go), placed alongside the existing `URL string` field. `[📋 Planned]`
+- **TASK-005**: Add `Labels map[string]string` field (tag `json:"-"`) to `Info` in [internal/types/request.go](../../internal/types/request.go), placed alongside the existing `URL string` field. `[✅ Completed: 2026-09-16]`
   - Files: `internal/types/request.go`
 
-- **TASK-006**: Unit test in `internal/types/request_test.go` verifying `Info{}` zero-value has a nil `Labels` map and that the field round-trips correctly when set (no JSON marshalling expected, since it is tagged `json:"-"`). `[📋 Planned]`
+- **TASK-006**: Unit test in `internal/types/request_test.go` verifying `Info{}` zero-value has a nil `Labels` map and that the field round-trips correctly when set (no JSON marshalling expected, since it is tagged `json:"-"`). `[✅ Completed: 2026-09-16]`
   - Files: `internal/types/request_test.go`
   - Dependencies: TASK-005
 
@@ -79,11 +79,11 @@ Update the status of each task below as the plan progresses.
 
 - **GOAL-003**: Extract the optional `labels` map from the policy result into `info.Labels`.
 
-- **TASK-007**: In [internal/router/policy.go](../../internal/router/policy.go), after the existing `url` rewrite block (`if url, ok := resultMap["url"].(string); ok && url != ""`), add extraction of `resultMap["labels"].(map[string]interface{})`: for each entry, copy only string-valued entries into a new `map[string]string` assigned to `info.Labels`. Non-string values and a missing/absent `labels` key must be silently ignored (no error, no log). `[📋 Planned]`
+- **TASK-007**: In [internal/router/policy.go](../../internal/router/policy.go), after the existing `url` rewrite block (`if url, ok := resultMap["url"].(string); ok && url != ""`), add extraction of `resultMap["labels"].(map[string]interface{})`: for each entry, copy only string-valued entries into a new `map[string]string` assigned to `info.Labels`. Non-string values and a missing/absent `labels` key must be silently ignored (no error, no log). `[✅ Completed: 2026-09-16]`
   - Files: `internal/router/policy.go`
   - Dependencies: TASK-005
 
-- **TASK-008**: Unit tests in `internal/router/policy_test.go` covering: policy result with no `labels` key leaves `info.Labels` nil/empty; `labels` map with string values populates `info.Labels` exactly; `labels` map with non-string values drops those entries while keeping valid ones; `labels` present but not a `map[string]interface{}` is ignored without error. `[📋 Planned]`
+- **TASK-008**: Unit tests in `internal/router/policy_test.go` covering: policy result with no `labels` key leaves `info.Labels` nil/empty; `labels` map with string values populates `info.Labels` exactly; `labels` map with non-string values drops those entries while keeping valid ones; `labels` present but not a `map[string]interface{}` is ignored without error. `[✅ Completed: 2026-09-16]`
   - Files: `internal/router/policy_test.go`
   - Dependencies: TASK-007
 
@@ -91,26 +91,26 @@ Update the status of each task below as the plan progresses.
 
 - **GOAL-004**: Register custom label names on all four HTTP metrics and record sanitised values on every request.
 
-- **TASK-009**: Implement `sanitizeLabelValue(v string, maxLen int, def string) string` in [internal/metrics/metrics.go](../../internal/metrics/metrics.go): iterate runes, keep only those with `r < utf8.RuneSelf && unicode.IsPrint(r)`, build a byte slice, truncate to `maxLen`, return `def` if the result is empty. Add `unicode` and `unicode/utf8` imports. `[📋 Planned]`
+- **TASK-009**: Implement `sanitizeLabelValue(v string, maxLen int, def string) string` in [internal/metrics/metrics.go](../../internal/metrics/metrics.go): iterate runes, keep only those with `r < utf8.RuneSelf && unicode.IsPrint(r)`, build a byte slice, truncate to `maxLen`, return `def` if the result is empty. Add `unicode` and `unicode/utf8` imports. `[✅ Completed: 2026-09-16]`
   - Files: `internal/metrics/metrics.go`
 
-- **TASK-010**: Change `New()` signature to accept custom label names (`[]string`), max length (`int`), and default value (`string`) — e.g. `New(customLabels []string, maxLen int, def string)`. Store `customLabels`, `maxLen`, `def` in the package-level `metrics` struct. Build the vector label set as `append([]string{"method", "code", "url"}, customLabels...)` and use it for all four `promauto` vector registrations (`requestsTotal`, `requestDuration`, `requestSize`, `responseSize`). When `customLabels` is empty, the resulting label set must be identical to today's `[]string{"method", "code", "url"}`. `[📋 Planned]`
+- **TASK-010**: Change `New()` signature to accept custom label names (`[]string`), max length (`int`), and default value (`string`) — e.g. `New(customLabels []string, maxLen int, def string)`. Store `customLabels`, `maxLen`, `def` in the package-level `metrics` struct. Build the vector label set as `append([]string{"method", "code", "url"}, customLabels...)` and use it for all four `promauto` vector registrations (`requestsTotal`, `requestDuration`, `requestSize`, `responseSize`). When `customLabels` is empty, the resulting label set must be identical to today's `[]string{"method", "code", "url"}`. `[✅ Completed: 2026-09-16]`
   - Files: `internal/metrics/metrics.go`
   - Dependencies: TASK-009
 
-- **TASK-011**: Update the call site in [internal/application/mgmt.go](../../internal/application/mgmt.go) (`metrics.New()`) to pass `app.config.MetricLabels`, `app.config.MetricLabelMaxLength`, `app.config.MetricLabelDefault`. `[📋 Planned]`
+- **TASK-011**: Update the call site in [internal/application/mgmt.go](../../internal/application/mgmt.go) (`metrics.New()`) to pass `app.config.MetricLabels`, `app.config.MetricLabelMaxLength`, `app.config.MetricLabelDefault`. `[✅ Completed: 2026-09-16]`
   - Files: `internal/application/mgmt.go`
   - Dependencies: TASK-010
 
-- **TASK-012**: Update all other `metrics.New()` call sites (test setup code, e.g. `internal/router/cleanup_test.go`) to pass matching arguments (empty slice, default max length `20`, default value `"-"`, or values under test). `[📋 Planned]`
+- **TASK-012**: Update all other `metrics.New()` call sites (test setup code, e.g. `internal/router/cleanup_test.go`) to pass matching arguments (empty slice, default max length `20`, default value `"-"`, or values under test). `[✅ Completed: 2026-09-16]`
   - Files: `internal/router/cleanup_test.go`
   - Dependencies: TASK-010
 
-- **TASK-013**: Update `Wrap()` in `internal/metrics/metrics.go` to build the label-value slice as `append(make([]string, 0, 3+len(metrics.customLabels)), r.Method, strconv.Itoa(w2.Status()), info.URL)`, then for each name in `metrics.customLabels`, append `sanitizeLabelValue(info.Labels[name], metrics.maxLen, metrics.def)`. Use this slice for all four `WithLabelValues` calls. When `metrics.customLabels` is empty, behaviour and allocations must match the current implementation. `[📋 Planned]`
+- **TASK-013**: Update `Wrap()` in `internal/metrics/metrics.go` to build the label-value slice as `append(make([]string, 0, 3+len(metrics.customLabels)), r.Method, strconv.Itoa(w2.Status()), info.URL)`, then for each name in `metrics.customLabels`, append `sanitizeLabelValue(info.Labels[name], metrics.maxLen, metrics.def)`. Use this slice for all four `WithLabelValues` calls. When `metrics.customLabels` is empty, behaviour and allocations must match the current implementation. `[✅ Completed: 2026-09-16]`
   - Files: `internal/metrics/metrics.go`
   - Dependencies: TASK-010
 
-- **TASK-014**: Unit tests in `internal/metrics/metrics_test.go` (create if absent) covering: `sanitizeLabelValue` — non-printable stripping, control-character stripping, non-ASCII stripping, truncation at the boundary (exact `maxLen`, one over), empty input returns default, already-valid input passes through unchanged; `New()`+`Wrap()` integration — with no custom labels the exposed metric label set is unchanged (`method`, `code`, `url` only); with custom labels configured, `Wrap()` records the correct sanitised value per label in the declared order; a request with no `info.Labels` entry for a registered name records the default value; an unregistered key present in `info.Labels` is never emitted as a label. `[📋 Planned]`
+- **TASK-014**: Unit tests in `internal/metrics/metrics_test.go` (create if absent) covering: `sanitizeLabelValue` — non-printable stripping, control-character stripping, non-ASCII stripping, truncation at the boundary (exact `maxLen`, one over), empty input returns default, already-valid input passes through unchanged; `New()`+`Wrap()` integration — with no custom labels the exposed metric label set is unchanged (`method`, `code`, `url` only); with custom labels configured, `Wrap()` records the correct sanitised value per label in the declared order; a request with no `info.Labels` entry for a registered name records the default value; an unregistered key present in `info.Labels` is never emitted as a label. `[✅ Completed: 2026-09-16]`
   - Files: `internal/metrics/metrics_test.go`
   - Dependencies: TASK-013, TASK-011, TASK-012
 
@@ -118,23 +118,23 @@ Update the status of each task below as the plan progresses.
 
 - **GOAL-005**: Document the feature and provide runnable examples, once all code and tests from Phases 1-4 are complete.
 
-- **TASK-015**: Add a "Custom Metric Labels" section to [docs/METRICS.md](../../docs/METRICS.md) describing `METRIC_LABELS`, `METRIC_LABEL_MAX_LENGTH`, `METRIC_LABEL_DEFAULT`, the `labels` policy result field, the sanitisation rules, and a high-cardinality warning reusing the phrasing of the existing `url`-label warning. `[📋 Planned]`
+- **TASK-015**: Add a "Custom Metric Labels" section to [docs/METRICS.md](../../docs/METRICS.md) describing `METRIC_LABELS`, `METRIC_LABEL_MAX_LENGTH`, `METRIC_LABEL_DEFAULT`, the `labels` policy result field, the sanitisation rules, and a high-cardinality warning reusing the phrasing of the existing `url`-label warning. `[✅ Completed: 2026-09-16]`
   - Files: `docs/METRICS.md`
   - Dependencies: TASK-014
 
-- **TASK-016**: Add rows for `METRIC_LABELS`, `METRIC_LABEL_MAX_LENGTH`, `METRIC_LABEL_DEFAULT` to [docs/CONFIGURATION.md](../../docs/CONFIGURATION.md) and [docs/ENV-VARS.md](../../docs/ENV-VARS.md), matching the existing table format for other config fields (env var, flag, type, default, description). `[📋 Planned]`
+- **TASK-016**: Add rows for `METRIC_LABELS`, `METRIC_LABEL_MAX_LENGTH`, `METRIC_LABEL_DEFAULT` to [docs/CONFIGURATION.md](../../docs/CONFIGURATION.md) and [docs/ENV-VARS.md](../../docs/ENV-VARS.md), matching the existing table format for other config fields (env var, flag, type, default, description). `[✅ Completed: 2026-09-16]` — scope adjusted per user: `docs/ENV-VARS.md` documents only the envsubst-in-policies feature (no general config table), so it is skipped; rows added to `docs/CONFIGURATION.md` only.
   - Files: `docs/CONFIGURATION.md`, `docs/ENV-VARS.md`
   - Dependencies: TASK-014
 
-- **TASK-017**: Add a "Custom Metric Labels (`labels` result)" subsection to [docs/POLICY.md](../../docs/POLICY.md) alongside the existing `url` result documentation, including the example policy from the feature spec (`labels := {"client_version": v} if { v := input.request.headers["X-Client-Version"] }`). `[📋 Planned]`
+- **TASK-017**: Add a "Custom Metric Labels (`labels` result)" subsection to [docs/POLICY.md](../../docs/POLICY.md) alongside the existing `url` result documentation, including the example policy from the feature spec (`labels := {"client_version": v} if { v := input.request.headers["X-Client-Version"] }`). `[✅ Completed: 2026-09-16]`
   - Files: `docs/POLICY.md`
   - Dependencies: TASK-014
 
-- **TASK-018**: Update or add an example under [examples/](../../examples/) demonstrating a policy that sets a custom `labels` result together with the corresponding `METRIC_LABELS` configuration (e.g., extend `examples/no-auth/` or add a new `examples/metric-labels/` folder with its own README section, following the structure of existing examples). `[📋 Planned]`
+- **TASK-018**: Update or add an example under [examples/](../../examples/) demonstrating a policy that sets a custom `labels` result together with the corresponding `METRIC_LABELS` configuration (e.g., extend `examples/no-auth/` or add a new `examples/metric-labels/` folder with its own README section, following the structure of existing examples). `[✅ Completed: 2026-09-16]`
   - Files: `examples/README.md`, new example folder under `examples/`
   - Dependencies: TASK-017
 
-- **TASK-019**: Cross-link the new feature from [docs/POLICY.md](../../docs/POLICY.md) and [docs/METRICS.md](../../docs/METRICS.md) to `.specs/features/policy-driven-metric-labels.md` and to `url-metrics-level.md` (companion cardinality-control feature), matching the existing "Related features" cross-referencing style. `[📋 Planned]`
+- **TASK-019**: Cross-link the new feature from [docs/POLICY.md](../../docs/POLICY.md) and [docs/METRICS.md](../../docs/METRICS.md) to `.specs/features/policy-driven-metric-labels.md` and to `url-metrics-level.md` (companion cardinality-control feature), matching the existing "Related features" cross-referencing style. `[✅ Completed: 2026-09-16]`
   - Files: `docs/METRICS.md`, `docs/POLICY.md`
   - Dependencies: TASK-015, TASK-017
 

@@ -152,3 +152,15 @@ curl -H "Authorization: Bearer $TOKEN" http://your-ingress-host/api/endpoint
 - [JWT Authentication Setup](../docs/JWT.md)
 - [Azure Graph Setup](../docs/AZURE.md)
 - [WSO2 API Manager Setup](../docs/WSO2.md)
+
+## Custom Metric Labels
+
+In the `metric-labels` folder you'll find a minimal policy that populates a custom Prometheus label (`client_version`) from a request header, using the `METRIC_LABELS` configuration option.
+
+### What's Included
+
+- **request.rego** - Policy returning a `labels` result alongside `allow`
+- **README.md** - Configuration and usage walkthrough
+
+See [docs/METRICS.md](../docs/METRICS.md#custom-metric-labels) and [docs/POLICY.md](../docs/POLICY.md#custom-metric-labels-labels-result) for the full reference.
+

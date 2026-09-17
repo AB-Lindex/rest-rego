@@ -20,6 +20,9 @@ type Info struct {
 	Result  interface{} `json:"result,omitempty"`
 
 	URL string `json:"-"`
+
+	// Labels carries policy-provided custom Prometheus label values, keyed by label name.
+	Labels map[string]string `json:"-"`
 }
 
 // RequestInfo is the request information for the rego-policy

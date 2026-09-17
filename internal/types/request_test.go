@@ -960,3 +960,30 @@ func findSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+func TestInfo_Labels(t *testing.T) {
+	t.Run("zero value has nil Labels map", func(t *testing.T) {
+		info := Info{}
+		if info.Labels != nil {
+			t.Errorf("expected nil Labels map, got %v", info.Labels)
+		}
+	})
+
+	t.Run("Labels field round-trips when set", func(t *testing.T) {
+		info := Info{Labels: map[string]string{"client_version": "1.2.3"}}
+		if got := info.Labels["client_version"]; got != "1.2.3" {
+			t.Errorf("expected Labels[\"client_version\"] = %q, got %q", "1.2.3", got)
+		}
+	})
+
+	t.Run("Labels is excluded from JSON marshalling", func(t *testing.T) {
+		info := Info{Labels: map[string]string{"client_version": "1.2.3"}}
+		data, err := json.Marshal(info)
+		if err != nil {
+			t.Fatalf("Failed to marshal Info: %v", err)
+		}
+		if contains(string(data), "client_version") || contains(string(data), "Labels") {
+			t.Errorf("expected JSON to exclude Labels field, got %s", data)
+		}
+	})
+}

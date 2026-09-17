@@ -36,6 +36,9 @@ rest-rego supports configuration via:
 | `-r, --requestrego` | `REQUEST_REGO` | `request.rego` | Main policy file for requests |
 | `--expose-blocked-headers` | `EXPOSE_BLOCKED_HEADERS` | `false` | Expose blocked `X-Restrego-*` headers to policies |
 | `--url-metrics-level` | `URL_METRICS_LEVEL` | `0` | Path detail in Prometheus `url` label (`<0`=full path, `0`=none, `N`=first N segments). See [METRICS.md](METRICS.md#url_metrics_level) |
+| `--metric-labels` | `METRIC_LABELS` | *(empty)* | Custom Prometheus label names populated by policy `labels` results. See [METRICS.md](METRICS.md#custom-metric-labels) |
+| `--metric-label-max-length` | `METRIC_LABEL_MAX_LENGTH` | `20` | Maximum length of a custom metric label value |
+| `--metric-label-default` | `METRIC_LABEL_DEFAULT` | `-` | Default value for a custom metric label when missing or empty |
 
 ### Examples
 

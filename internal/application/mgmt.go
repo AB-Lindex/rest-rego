@@ -18,7 +18,7 @@ var mgmt struct {
 
 func (app *AppData) startMgmt() {
 
-	metrics.New()
+	metrics.New(app.config.MetricLabels, app.config.MetricLabelMaxLength, app.config.MetricLabelDefault)
 
 	// Initialize blocked headers feature metric
 	metrics.SetBlockedHeadersExposed(app.config.ExposeBlockedHeaders)

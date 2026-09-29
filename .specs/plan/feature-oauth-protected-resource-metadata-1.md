@@ -102,7 +102,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
   depends on them.
 
 - **TASK-001**: Add `ResourceURL` and `ResourceMetadataPath` fields to
-  `internal/config/config.go` `Fields` struct `[📋 Planned]`
+  `internal/config/config.go` `Fields` struct `[✅ Completed: 2026-09-28]`
   - Files: `internal/config/config.go`
   - Action: insert after the `PermissiveAuth` field:
     ```go
@@ -111,7 +111,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
     ```
 
 - **TASK-002**: Add `validateResourceMetadataConfig` validation to
-  `internal/config/config.go`, called from `New()` `[📋 Planned]`
+  `internal/config/config.go`, called from `New()` `[✅ Completed: 2026-09-28]`
   - Files: `internal/config/config.go`
   - Action: add a new unexported method, called after the existing `authCount`
     block and before the final `return f`:
@@ -143,7 +143,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
   - Call site: add `f.validateResourceMetadata()` in `New()` immediately after the
     existing `authCount > 1` / audiences validation block
 
-- **TASK-003**: Add unit tests for `validateResourceMetadata` behavior `[📋 Planned]`
+- **TASK-003**: Add unit tests for `validateResourceMetadata` behavior `[✅ Completed: 2026-09-28]`
   - Files: `internal/config/config_test.go` (new or existing file — check for
     presence first)
   - Cases: empty `ResourceMetadataPath` → defaults; `ResourceURL` set without JWT mode
@@ -164,7 +164,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
 - **GOAL-002**: Capture the `issuer` field from each OIDC discovery document and
   expose the de-duplicated list without requiring an extra HTTP round-trip.
 
-- **TASK-004**: Add `Issuer` field to `wellKnownData` struct `[📋 Planned]`
+- **TASK-004**: Add `Issuer` field to `wellKnownData` struct `[✅ Completed: 2026-09-28]`
   - Files: `internal/jwtsupport/jwt.go`
   - Action: extend the struct (currently `JwksURI`, `SupportedAlgorithms`,
     `sourceURL`, `isLocalFile`):
@@ -180,7 +180,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
   - No change needed to `LoadWellKnowns()` parsing logic itself — `json.Unmarshal`
     already populates any matching field automatically once it exists on the struct
 
-- **TASK-005**: Add `Issuers() []string` method to `JWTSupport` `[📋 Planned]`
+- **TASK-005**: Add `Issuers() []string` method to `JWTSupport` `[✅ Completed: 2026-09-28]`
   - Files: `internal/jwtsupport/jwt.go`
   - Action: add after `New()` (or near `LoadWellKnowns`):
     ```go
@@ -201,7 +201,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
     ```
   - Dependencies: TASK-004
 
-- **TASK-006**: Add unit test for `Issuers()` `[📋 Planned]`
+- **TASK-006**: Add unit test for `Issuers()` `[✅ Completed: 2026-09-28]`
   - Files: `internal/jwtsupport/jwt_test.go` (existing test file — confirm location
     via `internal/jwtsupport` directory listing before editing)
   - Cases: no well-knowns loaded → empty slice; single issuer → one-element slice;
@@ -215,7 +215,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
   `types.AuthChallenger` pattern.
 
 - **TASK-007**: Add `IssuerProvider` interface to `internal/types/types.go`
-  `[📋 Planned]`
+  `[✅ Completed: 2026-09-28]`
   - Files: `internal/types/types.go`
   - Action: add next to the existing `AuthChallenger` interface:
     ```go
@@ -233,7 +233,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
 - **GOAL-004**: Build the metadata document, the well-known URL helper, and the HTTP
   handler in a new file, computed once at startup.
 
-- **TASK-008**: Create `internal/router/metadata.go` `[📋 Planned]`
+- **TASK-008**: Create `internal/router/metadata.go` `[✅ Completed: 2026-09-28]`
   - Files: `internal/router/metadata.go` (new file)
   - Contents:
     - `protectedResourceMetadata` struct:
@@ -257,7 +257,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
   - Dependencies: TASK-001 (config fields), TASK-007 (interface)
 
 - **TASK-009**: Extend `Proxy` struct with precomputed metadata state
-  `[📋 Planned]`
+  `[✅ Completed: 2026-09-28]`
   - Files: `internal/router/types.go`
   - Action: add fields to `Proxy` struct:
     ```go
@@ -265,7 +265,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
     resourceMetadataURL  string // well-known challenge URL, "" if disabled
     ```
 
-- **TASK-010**: Add unit tests for `buildWellKnownURL` `[📋 Planned]`
+- **TASK-010**: Add unit tests for `buildWellKnownURL` `[✅ Completed: 2026-09-28]`
   - Files: `internal/router/metadata_test.go` (new file)
   - Cases (from feature spec examples):
     - `RESOURCE_URL=https://host` + default path →
@@ -284,7 +284,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
   construction time.
 
 - **TASK-011**: Register the metadata route in `internal/router/router.go`
-  `[📋 Planned]`
+  `[✅ Completed: 2026-09-28]`
   - Files: `internal/router/router.go`
   - Action: in `New()`, after `proxy.auth = auth` is assigned and before `return
     proxy`, add:
@@ -328,7 +328,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
   construction between `auth.go` and `policy.go`.
 
 - **TASK-012**: Add a shared challenge-string helper to `internal/router/auth.go`
-  `[📋 Planned]`
+  `[✅ Completed: 2026-09-28]`
   - Files: `internal/router/auth.go`
   - Action: extract a small helper used by both the existing `401 invalid
     credentials` branch and the new deny-path branch:
@@ -353,7 +353,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
   - Requires adding `"fmt"` to the existing import block in `auth.go`
 
 - **TASK-013**: Split `401`/`403` on policy deny in `internal/router/policy.go`
-  `[📋 Planned]`
+  `[✅ Completed: 2026-09-28]`
   - Files: `internal/router/policy.go`
   - Action: replace the existing:
     ```go
@@ -387,7 +387,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
     `RESOURCE_URL` configured
 
 - **TASK-014**: Add/extend unit tests for the deny-path status-code split
-  `[📋 Planned]`
+  `[✅ Completed: 2026-09-28]`
   - Files: `internal/router/policy_test.go` (existing test file — confirm presence
     first)
   - Cases:
@@ -406,7 +406,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
       confirming the allow path is untouched
 
 - **TASK-015**: Add/extend unit test for `internal/router/auth.go`'s
-  `401 invalid credentials` path with metadata enabled `[📋 Planned]`
+  `401 invalid credentials` path with metadata enabled `[✅ Completed: 2026-09-28]`
   - Files: `internal/router/auth_test.go` (existing test file — confirm presence
     first)
   - Case: JWT mode + `RESOURCE_URL` set, malformed/expired token → `401`, existing
@@ -420,7 +420,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
   component.
 
 - **TASK-016**: Add `RESOURCE_URL` / `RESOURCE_METADATA_PATH` to
-  `docs/CONFIGURATION.md` JWT section `[📋 Planned]`
+  `docs/CONFIGURATION.md` JWT section `[✅ Completed: 2026-09-28]`
   - Files: `docs/CONFIGURATION.md`
   - Action: add both new flags to the existing options table alongside
     `WELLKNOWN_OIDC` / `JWT_AUDIENCES` (around line 115), with defaults and a short
@@ -428,7 +428,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
     endpoint and the `401` vs `403` distinction
 
 - **TASK-017**: Add a new `docs/MCP-AUTH.md` (or extend `docs/JWT.md`) explaining
-  RFC 9728 support end-to-end `[📋 Planned]`
+  RFC 9728 support end-to-end `[✅ Completed: 2026-09-28]`
   - Files: `docs/JWT.md` or new `docs/MCP-AUTH.md` — decide based on existing doc
     length/scope conventions in `docs/`
   - Contents: example metadata document, example `WWW-Authenticate` header, the
@@ -437,7 +437,7 @@ all other auth modes and the `PERMISSIVE_AUTH` credential-downgrade path are una
     the feature spec
 
 - **TASK-018**: Document the ingress dual-path/rewrite requirement in
-  `docs/DEPLOYMENT.md` and add a Kubernetes example `[📋 Planned]`
+  `docs/DEPLOYMENT.md` and add a Kubernetes example `[✅ Completed: 2026-09-28]`
   - Files: `docs/DEPLOYMENT.md`, `examples/kubernetes/ingress.yaml` (or a new
     `examples/kubernetes/mcp-auth/` folder mirroring the existing
     `examples/kubernetes/basic-auth/` and `examples/kubernetes/file-based-jwks/`

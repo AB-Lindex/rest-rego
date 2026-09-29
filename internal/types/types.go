@@ -17,3 +17,10 @@ type Validator interface {
 type AuthChallenger interface {
 	WWWAuthenticate() string
 }
+
+// IssuerProvider is optionally implemented by AuthProviders that can advertise
+// one or more OAuth 2.0 / OIDC issuer URLs for RFC 9728 protected-resource
+// metadata.
+type IssuerProvider interface {
+	Issuers() []string
+}

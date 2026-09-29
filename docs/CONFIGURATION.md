@@ -9,6 +9,7 @@ Complete reference for all rest-rego configuration options.
 - [Network Configuration](#network-configuration)
 - [Authentication Configuration](#authentication-configuration)
   - [JWT Authentication](#jwt-authentication)
+  - [RFC 9728 Protected Resource Metadata](#rfc-9728-protected-resource-metadata)
   - [Azure Graph Authentication](#azure-graph-authentication)
   - [Basic Authentication](#basic-authentication)
 - [Timeout Configuration](#timeout-configuration)
@@ -118,6 +119,8 @@ rest-rego supports three mutually exclusive authentication modes:
 | `-a, --auth-header` | `AUTH_HEADER` | `Authorization` | HTTP header for authentication token |
 | `-k, --auth-kind` | `AUTH_KIND` | `bearer` | Expected authentication type (case-insensitive) |
 | `--permissive-auth` | `PERMISSIVE_AUTH` | `false` | Allow unauthenticated requests (treat as anonymous) |
+| `--resource-url` | `RESOURCE_URL` | - | Externally-reachable URL of this protected resource (RFC 9728). Required to enable the metadata endpoint |
+| `--resource-metadata-path` | `RESOURCE_METADATA_PATH` | `/.well-known/oauth-protected-resource` | Path this instance listens on (and advertises) for RFC 9728 metadata |
 
 #### Standard OIDC (Azure AD, Okta, Auth0)
 
@@ -167,6 +170,54 @@ rest-rego
 ```
 
 **Note**: File-based sources must have matching source types—if the well-known configuration is loaded from a file, the `jwks_uri` inside it must also use a `file://` URL (both file or both HTTP). See [FILE-BASED-JWKS.md](FILE-BASED-JWKS.md) for complete documentation.
+
+### RFC 9728 Protected Resource Metadata
+
+When JWT (OIDC) auth mode is active and `RESOURCE_URL` is configured, rest-rego serves
+an [RFC 9728](https://www.rfc-editor.org/rfc/rfc9728) OAuth 2.0 Protected Resource
+Metadata document at `RESOURCE_METADATA_PATH` (unauthenticated, publicly readable).
+This lets MCP-aware and other RFC 9728-compliant clients discover the real upstream
+authorization server(s) instead of assuming rest-rego itself issues tokens.
+
+```bash
+export WELLKNOWN_OIDC="https://login.microsoftonline.com/TENANT-ID/v2.0/.well-known/openid-configuration"
+export JWT_AUDIENCES="api://your-api-audience"
+export RESOURCE_URL="https://api.example.com/mcp"
+rest-rego
+```
+
+```json
+{
+  "resource": "https://api.example.com/mcp",
+  "authorization_servers": ["https://login.microsoftonline.com/TENANT-ID/v2.0"],
+  "bearer_methods_supported": ["header"]
+}
+```
+
+**Behavior**:
+
+- If `RESOURCE_URL` is unset while JWT mode is active, the endpoint is **not**
+  registered (`404`) and a warning is logged — startup does not fail
+- A request denied by policy with **no** `Authorization` header at all now returns
+  `401` with a `WWW-Authenticate: Bearer resource_metadata="<well-known URL>"`
+  header instead of `403`
+- A request denied by policy that **did** present credentials (valid, invalid, or
+  downgraded via `PERMISSIVE_AUTH`) still returns `403`, unchanged
+- The well-known URL is built by inserting `RESOURCE_METADATA_PATH` before the path
+  component of `RESOURCE_URL`, e.g. `RESOURCE_URL=https://host/mcp` →
+  `https://host/.well-known/oauth-protected-resource/mcp` — see
+  [DEPLOYMENT.md](DEPLOYMENT.md#rfc-9728-ingress-rewrite) for the required ingress
+  rewrite rule when `RESOURCE_URL` includes a path
+- Only JWT (OIDC) auth mode is affected; Azure, Basic Auth, and No-Auth modes never
+  register this endpoint and always return `403` on deny
+
+**If your IdP is Microsoft Entra ID**: the app registration must issue **v2 access
+tokens** (`requestedAccessTokenVersion: 2`) and its Application ID URI must exactly
+match `RESOURCE_URL` (no trailing slash), or token requests fail with
+`AADSTS9010010`. See [JWT.md](JWT.md#azure-microsoft-entra-id) for details.
+
+See [JWT.md](JWT.md#rfc-9728-protected-resource-metadata) for the full MCP client
+discovery flow.
 
 ### Azure Graph Authentication
 
@@ -471,3 +522,4 @@ rest-rego --backend-port 9090  # Uses 9090 (flag overrides env)
 - [Azure Graph Authentication](./AZURE.md) - Azure Graph setup
 - [Deployment Guide](./DEPLOYMENT.md) - Production deployment patterns
 - [Troubleshooting](./TROUBLESHOOTING.md) - Configuration issues and solutions
+- [Secure a Model Context Protocol (MCP) server with Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/agent-id/secure-mcp-server-with-entra-id) - Entra ID app registration and token-validation guidance for MCP servers

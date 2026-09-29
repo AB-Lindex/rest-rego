@@ -1195,3 +1195,66 @@ func TestAuthenticate_FileBasedKeys_WrongAudience(t *testing.T) {
 		t.Logf("Got error: %v (expected ErrAuthenticationFailed)", err)
 	}
 }
+
+// TestIssuers tests JWTSupport.Issuers() de-duplication and missing-field behavior
+func TestIssuers(t *testing.T) {
+	t.Run("no well-knowns loaded returns empty slice", func(t *testing.T) {
+		j := &JWTSupport{}
+		if got := j.Issuers(); len(got) != 0 {
+			t.Errorf("expected empty slice, got %v", got)
+		}
+	})
+
+	t.Run("single issuer returns one-element slice", func(t *testing.T) {
+		j := &JWTSupport{
+			wellknownList: []*wellKnownData{
+				{Issuer: "https://issuer-a.example.com"},
+			},
+		}
+		got := j.Issuers()
+		want := []string{"https://issuer-a.example.com"}
+		if len(got) != len(want) || got[0] != want[0] {
+			t.Errorf("expected %v, got %v", want, got)
+		}
+	})
+
+	t.Run("duplicate issuers across well-knowns are de-duplicated", func(t *testing.T) {
+		j := &JWTSupport{
+			wellknownList: []*wellKnownData{
+				{Issuer: "https://issuer-a.example.com"},
+				{Issuer: "https://issuer-a.example.com"},
+				{Issuer: "https://issuer-b.example.com"},
+			},
+		}
+		got := j.Issuers()
+		want := []string{"https://issuer-a.example.com", "https://issuer-b.example.com"}
+		if len(got) != len(want) {
+			t.Fatalf("expected %v, got %v", want, got)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("expected %v, got %v", want, got)
+			}
+		}
+	})
+
+	t.Run("missing issuer field is skipped, others still returned", func(t *testing.T) {
+		j := &JWTSupport{
+			wellknownList: []*wellKnownData{
+				{Issuer: "https://issuer-a.example.com"},
+				{Issuer: ""},
+				{Issuer: "https://issuer-b.example.com"},
+			},
+		}
+		got := j.Issuers()
+		want := []string{"https://issuer-a.example.com", "https://issuer-b.example.com"}
+		if len(got) != len(want) {
+			t.Fatalf("expected %v, got %v", want, got)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("expected %v, got %v", want, got)
+			}
+		}
+	})
+}

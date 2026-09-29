@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"time"
@@ -42,6 +43,8 @@ type Fields struct {
 	Audiences            []string `arg:"-u,--audience,env:JWT_AUDIENCES" help:"audience for JWT verification" placeholder:"AUDIENCE"`
 	AudienceKey          string   `arg:"--audience-key,env:JWT_AUDIENCE_KEY" default:"aud" help:"claim key to use for audience check" placeholder:"KEY"`
 	PermissiveAuth       bool     `arg:"--permissive-auth,env:PERMISSIVE_AUTH" default:"false" help:"allow invalid tokens to be treated as anonymous (default: false, strict mode)"`
+	ResourceURL          string   `arg:"--resource-url,env:RESOURCE_URL" help:"externally-reachable URL of this protected resource (RFC 9728); required for JWT mode to serve metadata" placeholder:"URL"`
+	ResourceMetadataPath string   `arg:"--resource-metadata-path,env:RESOURCE_METADATA_PATH" default:"/.well-known/oauth-protected-resource" help:"path this instance listens on (and advertises) for RFC 9728 metadata; empty keeps the RFC default" placeholder:"PATH"`
 	BasicAuthFile        string   `arg:"--basic-auth-file,env:BASIC_AUTH_FILE" help:"path to Apache 2.4 htpasswd file (bcrypt only)" placeholder:"FILE"`
 	NoAuth               bool     `arg:"--no-auth,env:NO_AUTH" default:"false" help:"disable authentication — policy is the sole access control (requires explicit opt-in)"`
 	ExposeBlockedHeaders bool     `arg:"--expose-blocked-headers,env:EXPOSE_BLOCKED_HEADERS" default:"false" help:"expose X-Restrego-* headers to policy as blocked_headers (security: headers still removed from backend)"`
@@ -115,6 +118,38 @@ func (f *Fields) validateMetricLabelsConfig() error {
 func (f *Fields) validateMetricLabels() {
 	if err := f.validateMetricLabelsConfig(); err != nil {
 		slog.Error("config: invalid metric-labels configuration", "error", err)
+		os.Exit(1)
+	}
+}
+
+// validateResourceMetadataConfig validates and normalizes RFC 9728 metadata config,
+// returning an error describing the first problem found, or nil if valid.
+func (f *Fields) validateResourceMetadataConfig() error {
+	if f.ResourceMetadataPath == "" {
+		f.ResourceMetadataPath = "/.well-known/oauth-protected-resource"
+	}
+	if f.ResourceURL == "" {
+		if len(f.WellKnownURL) > 0 {
+			slog.Warn("config: JWT (OIDC) mode active but resource-url is not set — RFC 9728 metadata endpoint disabled")
+		}
+		return nil
+	}
+	if len(f.WellKnownURL) == 0 {
+		slog.Warn("config: resource-url is configured but JWT (OIDC) auth mode is not active — ignoring")
+		return nil
+	}
+	u, err := url.Parse(f.ResourceURL)
+	if err != nil || !u.IsAbs() || (u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("resource-url must be an absolute http(s) URL, got %q", f.ResourceURL)
+	}
+	return nil
+}
+
+// validateResourceMetadata validates the RFC 9728 metadata configuration, exiting the
+// process on failure.
+func (f *Fields) validateResourceMetadata() {
+	if err := f.validateResourceMetadataConfig(); err != nil {
+		slog.Error("config: invalid resource-url configuration", "error", err)
 		os.Exit(1)
 	}
 }
@@ -213,6 +248,7 @@ func New() *Fields {
 		slog.Error("config: audiences must be provided when using well-known")
 		os.Exit(1)
 	}
+	f.validateResourceMetadata()
 	if len(f.AuthHeader) == 0 {
 		slog.Error("config: auth-header must be provided")
 		os.Exit(1)

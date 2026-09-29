@@ -50,6 +50,13 @@ JWT_AUDIENCES=$GUARD_APPIDURI
 
 On startup you should see a line stating '..loaded jwks..' ending with 'keys=N' (where N should be >0)
 
+**v1 vs v2 access tokens:** the token version is controlled by `requestedAccessTokenVersion`
+in the app registration's manifest, not by which endpoint you call. If you're securing an
+MCP server with [RFC 9728 support](#rfc-9728-protected-resource-metadata), set
+`requestedAccessTokenVersion` to `2` — this is required before an HTTPS Application ID
+URI can be set, and v2 tokens are what MCP clients expect. See [Register your MCP server
+in Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/agent-id/secure-mcp-server-with-entra-id#register-your-mcp-server-in-microsoft-entra-id).
+
 ### How to get a token
 As the api-consumer you also need an Azure Application (normally in the same tenant as the 'guard')
 
@@ -167,6 +174,13 @@ For detailed WSO2 configuration, see [WSO2.md](WSO2.md).
 Azure AD issues JWTs with standard claims in a flat structure. The Rego policies receive an `input` object like this:
 
 _(Use the `--debug` option to see the exact structure for your setup)_
+
+**Note:** the example below is a **v1** access token (`"ver": "1.0"`, `iss` under
+`sts.windows.net`). A **v2** token (`"ver": "2.0"`) instead has an `iss` like
+`https://login.microsoftonline.com/tenant-id/v2.0` and an `aud` that's a plain GUID
+or client ID rather than an Application ID URI array. If you're using [RFC 9728
+support](#rfc-9728-protected-resource-metadata) for MCP clients, your app must issue
+v2 tokens so `iss` matches the `.../v2.0` value advertised in `authorization_servers`.
 
 ```json
 {
@@ -502,13 +516,82 @@ data:
     appid := input.jwt.appid
 ```
 
+## RFC 9728 Protected Resource Metadata
+
+MCP-aware clients (such as VS Code's MCP client) expect a server fronted by an
+authorization layer to advertise the real upstream authorization server(s) via
+[RFC 9728](https://www.rfc-editor.org/rfc/rfc9728) (OAuth 2.0 Protected Resource
+Metadata), rather than assuming the fronting layer is itself the authorization
+server. rest-rego supports this in JWT (OIDC) auth mode.
+
+### Enabling the endpoint
+
+```bash
+export WELLKNOWN_OIDC="https://login.microsoftonline.com/TENANT-ID/v2.0/.well-known/openid-configuration"
+export JWT_AUDIENCES="api://your-api-audience"
+export RESOURCE_URL="https://api.example.com/mcp"
+rest-rego
+```
+
+`GET https://api.example.com/.well-known/oauth-protected-resource/mcp` (the plain
+`RESOURCE_METADATA_PATH` route on rest-rego itself, reached via an ingress rewrite —
+see below) then returns:
+
+```json
+{
+  "resource": "https://api.example.com/mcp",
+  "authorization_servers": ["https://login.microsoftonline.com/tenant-id/v2.0"],
+  "bearer_methods_supported": ["header"]
+}
+```
+
+`authorization_servers` is the de-duplicated list of `issuer` values collected from
+every configured `WELLKNOWN_OIDC` document, so multiple comma-separated well-knowns
+produce multiple entries.
+
+### 401 vs 403 on policy deny
+
+- A request with **no** `Authorization` header at all, denied by policy, now gets:
+  ```
+  HTTP/1.1 401 Unauthorized
+  WWW-Authenticate: Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource/mcp"
+  ```
+- A request that presented credentials — valid, invalid, or downgraded to anonymous
+  by `PERMISSIVE_AUTH` — still gets `403 Forbidden` on deny, unchanged from today
+
+### Ingress rewrite requirement when `RESOURCE_URL` has a path
+
+The well-known URL is built by inserting `RESOURCE_METADATA_PATH` **before** the path
+component of `RESOURCE_URL` (the RFC 8414/9728 convention), e.g.
+`RESOURCE_URL=https://api.example.com/mcp` advertises
+`https://api.example.com/.well-known/oauth-protected-resource/mcp`. rest-rego itself
+only ever listens on the plain `RESOURCE_METADATA_PATH` — your ingress must rewrite
+the path-suffixed well-known URL back to the plain path before it reaches rest-rego.
+See [DEPLOYMENT.md](DEPLOYMENT.md#rfc-9728-ingress-rewrite) for a worked Kubernetes
+example.
+
+### Entra ID `resource` / `identifierUris` precedent
+
+If `authorization_servers` or the token audience your client requests doesn't match a
+registered `identifierUris` entry on the Entra ID application, token acquisition fails
+with `AADSTS9010010` or `AADSTS500011`. This is an IdP-side app registration mismatch,
+not a rest-rego defect — verify `RESOURCE_URL` and `JWT_AUDIENCES` line up with the
+application's configured identifier URIs. Two common causes:
+
+- The app registration still issues v1 tokens (`requestedAccessTokenVersion` unset or
+  `1`), which can't have an HTTPS Application ID URI at all.
+- `RESOURCE_URL` has a trailing slash or other character difference from the
+  registered Application ID URI — the match must be exact.
+
 ## See Also
 
+- [CONFIGURATION.md](CONFIGURATION.md#rfc-9728-protected-resource-metadata) - `RESOURCE_URL` / `RESOURCE_METADATA_PATH` configuration reference
 - [WSO2.md](WSO2.md) - WSO2 API Manager integration with custom JWT format
 - [AZURE.md](AZURE.md) - Azure-specific authentication details
 - [Open Policy Agent Documentation](https://www.openpolicyagent.org/docs/latest/)
 - [Rego Language Reference](https://www.openpolicyagent.org/docs/latest/policy-language/)
 - [JWT.io Token Debugger](https://jwt.io) - Decode and inspect JWT tokens
+- [Secure a Model Context Protocol (MCP) server with Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/agent-id/secure-mcp-server-with-entra-id) - Entra ID app registration and token-validation guidance for MCP servers
 
 ---
 

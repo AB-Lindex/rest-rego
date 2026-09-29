@@ -42,6 +42,7 @@ func getAlgorithm(name string) jwa.KeyAlgorithm {
 
 type wellKnownData struct {
 	JwksURI             string   `json:"jwks_uri"`
+	Issuer              string   `json:"issuer"`
 	SupportedAlgorithms []string `json:"id_token_signing_alg_values_supported"`
 	sourceURL           string   // original well-known URL used to load this data
 	isLocalFile         bool     // true if loaded from file: URL, false if from HTTP(S)
@@ -103,6 +104,21 @@ func New(wellKnowns []string, audKey string, audList []string, kind string, perm
 	j.buildParseOptions()
 
 	return j
+}
+
+// Issuers returns the de-duplicated, non-empty issuer values collected from all
+// configured well-known (OIDC discovery) documents, in first-seen order.
+func (j *JWTSupport) Issuers() []string {
+	seen := make(map[string]bool, len(j.wellknownList))
+	var out []string
+	for _, wc := range j.wellknownList {
+		if wc.Issuer == "" || seen[wc.Issuer] {
+			continue
+		}
+		seen[wc.Issuer] = true
+		out = append(out, wc.Issuer)
+	}
+	return out
 }
 
 func (j *JWTSupport) buildParseOptions() {

@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo
+  namespace: demo
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Rewrites the path-suffixed well-known URL back to the plain
+    # RESOURCE_METADATA_PATH that rest-rego itself listens on.
+    nginx.ingress.kubernetes.io/rewrite-target: /.well-known/oauth-protected-resource
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: demo-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          # RFC 9728 well-known document, path-suffixed to match RESOURCE_URL=.../mcp
+          - path: /.well-known/oauth-protected-resource/mcp
+            pathType: Exact
+            backend:
+              service:
+                name: demo
+                port:
+                  number: 80
+          # The actual protected resource path - routed unchanged, no rewrite
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: demo
+                port:
+                  number: 80

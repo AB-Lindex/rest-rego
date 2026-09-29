@@ -97,3 +97,84 @@ func TestMetricLabelsDefaults(t *testing.T) {
 		t.Errorf("expected no default MetricLabels, got %v", f.MetricLabels)
 	}
 }
+
+func TestValidateResourceMetadataConfig(t *testing.T) {
+	tests := []struct {
+		name         string
+		fields       Fields
+		wantErr      bool
+		wantPath     string
+		wantURLUnset bool
+	}{
+		{
+			name:     "empty metadata path defaults",
+			fields:   Fields{},
+			wantErr:  false,
+			wantPath: "/.well-known/oauth-protected-resource",
+		},
+		{
+			name:         "resource-url set without JWT mode warns, no error",
+			fields:       Fields{ResourceURL: "https://host/mcp"},
+			wantErr:      false,
+			wantPath:     "/.well-known/oauth-protected-resource",
+			wantURLUnset: false,
+		},
+		{
+			name:     "JWT mode active without resource-url warns, no error",
+			fields:   Fields{WellKnownURL: []string{"https://idp/.well-known/openid-configuration"}},
+			wantErr:  false,
+			wantPath: "/.well-known/oauth-protected-resource",
+		},
+		{
+			name: "JWT mode with valid absolute resource-url",
+			fields: Fields{
+				WellKnownURL: []string{"https://idp/.well-known/openid-configuration"},
+				ResourceURL:  "https://host/mcp",
+			},
+			wantErr:  false,
+			wantPath: "/.well-known/oauth-protected-resource",
+		},
+		{
+			name: "JWT mode with malformed resource-url errors",
+			fields: Fields{
+				WellKnownURL: []string{"https://idp/.well-known/openid-configuration"},
+				ResourceURL:  "not-a-url",
+			},
+			wantErr:  true,
+			wantPath: "/.well-known/oauth-protected-resource",
+		},
+		{
+			name: "JWT mode with relative resource-url errors",
+			fields: Fields{
+				WellKnownURL: []string{"https://idp/.well-known/openid-configuration"},
+				ResourceURL:  "/mcp",
+			},
+			wantErr:  true,
+			wantPath: "/.well-known/oauth-protected-resource",
+		},
+		{
+			name: "custom metadata path is preserved",
+			fields: Fields{
+				ResourceMetadataPath: "/oauth/metadata",
+			},
+			wantErr:  false,
+			wantPath: "/oauth/metadata",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := tt.fields
+			err := f.validateResourceMetadataConfig()
+			if tt.wantErr && err == nil {
+				t.Errorf("expected an error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("expected no error, got %v", err)
+			}
+			if f.ResourceMetadataPath != tt.wantPath {
+				t.Errorf("expected ResourceMetadataPath %q, got %q", tt.wantPath, f.ResourceMetadataPath)
+			}
+		})
+	}
+}

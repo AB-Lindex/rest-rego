@@ -2,11 +2,26 @@ package router
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/AB-Lindex/rest-rego/internal/types"
 )
+
+// wwwAuthenticateChallenge returns the WWW-Authenticate header value for this
+// proxy's auth provider, appending resource_metadata when RFC 9728 metadata is
+// enabled.
+func (proxy *Proxy) wwwAuthenticateChallenge() string {
+	challenge := "Bearer"
+	if c, ok := proxy.auth.(types.AuthChallenger); ok {
+		challenge = c.WWWAuthenticate()
+	}
+	if proxy.resourceMetadataURL != "" {
+		challenge = fmt.Sprintf(`%s resource_metadata="%s"`, challenge, proxy.resourceMetadataURL)
+	}
+	return challenge
+}
 
 func (proxy *Proxy) authHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,11 +48,7 @@ func (proxy *Proxy) authHandler(next http.Handler) http.Handler {
 			slog.Warn("router: authentication failed",
 				"path", r.URL.Path,
 				"method", r.Method)
-			challenge := "Bearer"
-			if c, ok := proxy.auth.(types.AuthChallenger); ok {
-				challenge = c.WWWAuthenticate()
-			}
-			w.Header().Set("WWW-Authenticate", challenge)
+			w.Header().Set("WWW-Authenticate", proxy.wwwAuthenticateChallenge())
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 
 		case errors.Is(err, types.ErrAuthenticationUnavailable):

@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -80,6 +81,31 @@ func New(auth types.AuthProvider, validator types.Validator, cfg *config.Fields)
 		proxy.authHandler,
 		proxy.policyHandler,
 	)
+
+	if ip, ok := auth.(types.IssuerProvider); ok && cfg.ResourceURL != "" {
+		issuers := ip.Issuers()
+		if len(issuers) == 0 {
+			slog.Warn("router: JWT mode active with resource-url set, but no issuers were discovered — RFC 9728 metadata endpoint disabled")
+		} else {
+			wellKnownURL, err := buildWellKnownURL(cfg.ResourceURL, cfg.ResourceMetadataPath)
+			if err != nil {
+				slog.Error("router: failed to build resource-metadata URL", "error", err)
+			} else {
+				meta := newProtectedResourceMetadata(cfg.ResourceURL, issuers)
+				body, err := json.Marshal(meta)
+				if err != nil {
+					slog.Error("router: failed to marshal protected-resource metadata", "error", err)
+				} else {
+					proxy.resourceMetadataJSON = body
+					proxy.resourceMetadataURL = wellKnownURL
+
+					slog.Info("router: registered RFC 9728 protected-resource metadata endpoint",
+						"path", cfg.ResourceMetadataPath, "resource", cfg.ResourceURL, "authorization_servers", issuers)
+				}
+			}
+		}
+	}
+
 	proxy.mux.Handle("/*", proxy)
 
 	proxy.auth = auth
@@ -89,11 +115,28 @@ func New(auth types.AuthProvider, validator types.Validator, cfg *config.Fields)
 	return proxy
 }
 
+// Handler returns the top-level http.Handler for this proxy. It intercepts the
+// RFC 9728 protected-resource metadata endpoint before the request ever reaches
+// proxy.mux: chi's Use() middlewares wrap the mux's entire routing tree as a
+// single computed handler, so a route registered via mux.With() still runs
+// behind authHandler/policyHandler — there is no per-route opt-out once Use()
+// has been called on a mux. Serving the metadata document here, ahead of the
+// mux, is the only way to keep it genuinely unauthenticated.
+func (proxy *Proxy) Handler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if proxy.resourceMetadataJSON != nil && r.Method == http.MethodGet && r.URL.Path == proxy.config.ResourceMetadataPath {
+			proxy.protectedResourceHandler(w, r)
+			return
+		}
+		proxy.mux.ServeHTTP(w, r)
+	})
+}
+
 // ListenAndServe starts the server (in background)
 func (proxy *Proxy) ListenAndServe() {
 	proxy.server = &http.Server{
 		Addr:    proxy.listenAddr,
-		Handler: proxy.mux,
+		Handler: proxy.Handler(),
 
 		// Timeouts to prevent slowloris and similar attacks (from config)
 		ReadHeaderTimeout: proxy.config.ReadHeaderTimeout,

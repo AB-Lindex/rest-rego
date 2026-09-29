@@ -60,6 +60,15 @@ func (proxy *Proxy) policyHandler(next http.Handler) http.Handler {
 
 		// Explicit deny check - fail closed by default
 		if !allowBool {
+			if info.Request.Auth == nil && proxy.resourceMetadataURL != "" {
+				slog.Info("router: anonymous request denied by policy",
+					"path", r.URL.Path,
+					"method", r.Method,
+					"id", info.Request.ID)
+				w.Header().Set("WWW-Authenticate", proxy.wwwAuthenticateChallenge())
+				http.Error(w, "authentication required", http.StatusUnauthorized)
+				return
+			}
 			slog.Info("router: access denied by policy",
 				"path", r.URL.Path,
 				"method", r.Method,

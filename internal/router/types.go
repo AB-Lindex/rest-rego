@@ -23,4 +23,7 @@ type Proxy struct {
 	backend     *httputil.ReverseProxy
 	authKey     string
 	config      *config.Fields
+
+	resourceMetadataJSON []byte // pre-marshaled RFC 9728 document, nil if disabled
+	resourceMetadataURL  string // well-known challenge URL, "" if disabled
 }

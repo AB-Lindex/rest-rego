@@ -53,7 +53,13 @@ tasks:
           -v ./.trivyignore:/.trivyignore:ro,z
           -v ./temp/trivy-db:/trivy-cache:z
           docker.io/aquasec/trivy:latest
-          fs --config /workspace/trivy.yaml --scanners vuln,secret,misconfig /workspace
+          --quiet fs --config /workspace/trivy.yaml --scanners vuln,secret,misconfig /workspace |
+          tee ./trivy-report.txt
+
+  govulncheck:
+    desc: Check Go source and dependencies for known vulnerabilities using govulncheck
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   scan-image:
     desc: Build and scan the container image for vulnerabilities using Trivy

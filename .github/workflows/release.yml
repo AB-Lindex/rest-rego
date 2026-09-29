@@ -18,7 +18,7 @@ jobs:
         goarch: [amd64, arm64]
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Get Version
       run: bash ./tools/get_version.sh
@@ -42,7 +42,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
     
     - name: Get Version
       run: bash ./tools/get_version.sh
@@ -50,14 +50,14 @@ jobs:
     - name: Docker meta (stable)
       id: meta-stable
       if: ${{ !github.event.release.prerelease }}
-      uses: docker/metadata-action@v4
+      uses: docker/metadata-action@v6
       with:
         images: |
           lindex/rest-rego
         tags: |
           type=semver,pattern=v{{version}}
           type=semver,pattern=v{{major}}.{{minor}}
-          type=semver,pattern=v{{major}}
+#          type=semver,pattern=v{{major}}
         labels: |
           org.opencontainers.image.title=restrego
           org.opencontainers.image.description=Protect your REST API with Rego policies
@@ -68,14 +68,14 @@ jobs:
     - name: Docker meta (prerelease)
       id: meta-beta
       if: ${{ github.event.release.prerelease }}
-      uses: docker/metadata-action@v4
+      uses: docker/metadata-action@v6
       with:
         images: |
           lindex/rest-rego-beta
         tags: |
           type=semver,pattern=v{{version}}-beta
           type=semver,pattern=v{{major}}.{{minor}}-beta
-          type=semver,pattern=v{{major}}-beta
+#          type=semver,pattern=v{{major}}-beta
         labels: |
           org.opencontainers.image.title=restrego
           org.opencontainers.image.description=Protect your REST API with Rego policies
@@ -84,16 +84,16 @@ jobs:
           org.opencontainers.image.licenses=MIT
 
     - name: Login to DockerHub
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         username: ${{ secrets.DOCKERHUB_USER }}
         password: ${{ secrets.DOCKERHUB_SECRET }}
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@v4
         
     - name: Build and push Docker images
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: .
         push: true

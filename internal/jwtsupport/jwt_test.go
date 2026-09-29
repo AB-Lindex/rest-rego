@@ -1,12 +1,16 @@
 package jwtsupport
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -1257,4 +1261,192 @@ func TestIssuers(t *testing.T) {
 			}
 		}
 	})
+}
+
+// newRSAJWK generates an RSA key pair and returns the public JWK (with the given
+// kid/alg set, suitable for publishing in a JWKS) and the corresponding private
+// JWK (with the same kid, suitable for signing).
+func newRSAJWK(t *testing.T, kid string) (jwk.Key, jwk.Key) {
+	t.Helper()
+	publicJWK, privateJWK := newRSAJWKPair(t, kid, kid)
+	return publicJWK, privateJWK
+}
+
+// newRSAJWKPair generates a single RSA key pair and returns the public JWK
+// (kid = pubKid, suitable for publishing in a JWKS) and the private JWK for
+// the SAME underlying key (kid = privKid, suitable for signing). Using
+// different kid values on the same crypto material lets tests simulate a
+// token whose kid header does not match the published JWKS key while still
+// producing a signature that verifies against that key.
+func newRSAJWKPair(t *testing.T, pubKid, privKid string) (jwk.Key, jwk.Key) {
+	t.Helper()
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Failed to generate RSA key pair: %v", err)
+	}
+
+	publicJWK, err := jwk.FromRaw(&privateKey.PublicKey)
+	if err != nil {
+		t.Fatalf("Failed to create public JWK: %v", err)
+	}
+	if err := publicJWK.Set(jwk.KeyIDKey, pubKid); err != nil {
+		t.Fatalf("Failed to set public key ID: %v", err)
+	}
+	if err := publicJWK.Set(jwk.AlgorithmKey, jwa.RS256); err != nil {
+		t.Fatalf("Failed to set public key algorithm: %v", err)
+	}
+
+	privateJWK, err := jwk.FromRaw(privateKey)
+	if err != nil {
+		t.Fatalf("Failed to create private JWK: %v", err)
+	}
+	if err := privateJWK.Set(jwk.KeyIDKey, privKid); err != nil {
+		t.Fatalf("Failed to set private key ID: %v", err)
+	}
+
+	return publicJWK, privateJWK
+}
+
+// signTestToken builds and signs a minimal valid JWT (aud, sub, iat, exp) with
+// the given private JWK.
+func signTestToken(t *testing.T, aud string, privateJWK jwk.Key) []byte {
+	t.Helper()
+	token := jwt.New()
+	if err := token.Set(jwt.AudienceKey, aud); err != nil {
+		t.Fatalf("Failed to set audience: %v", err)
+	}
+	if err := token.Set(jwt.SubjectKey, "test-user"); err != nil {
+		t.Fatalf("Failed to set subject: %v", err)
+	}
+	if err := token.Set(jwt.IssuedAtKey, time.Now().Unix()); err != nil {
+		t.Fatalf("Failed to set issued at: %v", err)
+	}
+	if err := token.Set(jwt.ExpirationKey, time.Now().Add(1*time.Hour).Unix()); err != nil {
+		t.Fatalf("Failed to set expiration: %v", err)
+	}
+
+	signedToken, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, privateJWK))
+	if err != nil {
+		t.Fatalf("Failed to sign token: %v", err)
+	}
+	return signedToken
+}
+
+// newHTTPJWKSFixture starts an httptest JWKS server serving the given public
+// keys, plus a well-known/OIDC-discovery server pointing at it, so that
+// JWTSupport.LoadWellKnowns/LoadJWKS exercise the isLocalFile == false branch.
+func newHTTPJWKSFixture(t *testing.T, keys ...jwk.Key) (jwksServer, wellKnownServer *httptest.Server) {
+	t.Helper()
+
+	set := jwk.NewSet()
+	for _, k := range keys {
+		if err := set.AddKey(k); err != nil {
+			t.Fatalf("Failed to add key to set: %v", err)
+		}
+	}
+	jwksJSON, err := json.Marshal(set)
+	if err != nil {
+		t.Fatalf("Failed to marshal JWKS: %v", err)
+	}
+
+	jwksServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(jwksJSON)
+	}))
+	t.Cleanup(jwksServer.Close)
+
+	wellKnownServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		body := `{"jwks_uri": "` + jwksServer.URL + `/jwks.json", "id_token_signing_alg_values_supported": ["RS256"]}`
+		w.Write([]byte(body))
+	}))
+	t.Cleanup(wellKnownServer.Close)
+
+	return jwksServer, wellKnownServer
+}
+
+// TestAuthenticate_HTTPKeySet_SingleKey_BypassesKidMismatch confirms the fix for
+// the v1.6.0 regression (see .specs/plan/fix-jwtsupport-http-keyset-kid-1.md): a
+// token signed with a kid that does not match the sole key in an HTTP(S)-fetched
+// JWKS is still authenticated, matching pre-v1.6.0 behavior of bypassing kid
+// matching entirely for single-key sets.
+func TestAuthenticate_HTTPKeySet_SingleKey_BypassesKidMismatch(t *testing.T) {
+	// JWKS publishes exactly one key, "jwks-key-1". The token is signed with the
+	// SAME underlying key material but a mismatched kid ("jwks-key-2"), so the
+	// signature is valid but a kid-based lookup would fail to find it.
+	jwksPublicKey, signingPrivateKey := newRSAJWKPair(t, "jwks-key-1", "jwks-key-2")
+	_, wellKnownServer := newHTTPJWKSFixture(t, jwksPublicKey)
+
+	// Capture logs so the underlying jwx error can be inspected (TASK-002),
+	// without changing any production code.
+	var logBuf bytes.Buffer
+	prevLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	defer slog.SetDefault(prevLogger)
+
+	j := New([]string{wellKnownServer.URL}, "aud", []string{"test-audience"}, "bearer", false)
+
+	signedToken := signTestToken(t, "test-audience", signingPrivateKey)
+
+	info := &types.Info{
+		Request: types.RequestInfo{
+			Auth: &types.RequestAuth{
+				Kind:  "bearer",
+				Token: string(signedToken),
+			},
+		},
+	}
+	req, err := http.NewRequest("GET", "http://example.com/test", nil)
+	if err != nil {
+		t.Fatalf("Failed to create mock request: %v", err)
+	}
+
+	err = j.Authenticate(info, req)
+	if err != nil {
+		t.Fatalf("Expected authentication to succeed despite kid mismatch (single-key bypass), got error: %v", err)
+	}
+	if info.JWT == nil {
+		t.Fatal("Expected info.JWT to be populated")
+	}
+
+	// TASK-002: surface the exact underlying jwx error for the issue record.
+	for _, line := range strings.Split(logBuf.String(), "\n") {
+		if strings.Contains(line, "token validation failed") {
+			t.Logf("captured jwx validation error: %s", line)
+		}
+	}
+}
+
+// TestAuthenticate_HTTPKeySet_MultipleKeys_KidMismatchStillRejected confirms REQ-002:
+// the single-key bypass does NOT extend to HTTP-cached JWKS with two or more keys —
+// kid matching must still be enforced in that case.
+func TestAuthenticate_HTTPKeySet_MultipleKeys_KidMismatchStillRejected(t *testing.T) {
+	// JWKS publishes two keys; the token's kid matches neither.
+	jwksPublicKey1, _ := newRSAJWK(t, "jwks-key-1")
+	jwksPublicKey2, _ := newRSAJWK(t, "jwks-key-2")
+	_, wellKnownServer := newHTTPJWKSFixture(t, jwksPublicKey1, jwksPublicKey2)
+
+	_, signingPrivateKey := newRSAJWK(t, "jwks-key-3")
+
+	j := New([]string{wellKnownServer.URL}, "aud", []string{"test-audience"}, "bearer", false)
+
+	signedToken := signTestToken(t, "test-audience", signingPrivateKey)
+
+	info := &types.Info{
+		Request: types.RequestInfo{
+			Auth: &types.RequestAuth{
+				Kind:  "bearer",
+				Token: string(signedToken),
+			},
+		},
+	}
+	req, err := http.NewRequest("GET", "http://example.com/test", nil)
+	if err != nil {
+		t.Fatalf("Failed to create mock request: %v", err)
+	}
+
+	err = j.Authenticate(info, req)
+	if err != types.ErrAuthenticationFailed {
+		t.Fatalf("Expected ErrAuthenticationFailed (multi-key kid enforcement), got: %v", err)
+	}
 }

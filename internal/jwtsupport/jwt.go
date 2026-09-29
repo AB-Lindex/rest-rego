@@ -144,6 +144,8 @@ func (j *JWTSupport) buildParseOptions() {
 					options = append(options, jwt.WithKeySet(nil))
 				}
 			} else {
+				// Placeholder only: for HTTP-cached issuers, options[0] is always
+				// overwritten per-request in Authenticate() against the live keyset.
 				options = append(options, jwt.WithKeySet(nil))
 			}
 
@@ -324,12 +326,18 @@ func (j *JWTSupport) Authenticate(info *types.Info, r *http.Request) error {
 			if wc.isLocalFile {
 				options = j.parseopts[i][audIndex]
 			} else {
-				// For HTTP-cached issuers, we need to inject the live keyset snapshot reference.
-				// Prepend a fresh jwt.WithKeySet(ks) option to a copy of the pre-built options
-				// (the first element [0] is the nil/static placeholder WithKeySet).
+				// For HTTP-cached issuers the keyset can change between requests
+				// (background refresh), so the single-key-vs-keyset decision must be
+				// made per-request against the live snapshot, mirroring the
+				// file-based branch's startup-time logic.
 				options = make([]jwt.ParseOption, len(j.parseopts[i][audIndex]))
 				copy(options, j.parseopts[i][audIndex])
 				options[0] = jwt.WithKeySet(ks)
+				if ks.Len() == 1 {
+					if key, ok := ks.Key(0); ok {
+						options[0] = jwt.WithKey(key.Algorithm(), key)
+					}
+				}
 			}
 
 			token, err := jwt.Parse(request, options...)

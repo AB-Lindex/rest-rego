@@ -50,6 +50,11 @@ Edit `deployment.yaml` and set:
 - `JWT_AUDIENCES` — the expected audience(s) for tokens presented to this API
 - `RESOURCE_URL` — the externally-reachable URL of this resource, including its path
   (e.g. `https://api.example.com/mcp`)
+- `RESOURCE_SCOPES` — the app registration's exposed scope (e.g. `access_as_user`),
+  expressed as a full scope URI matching `RESOURCE_URL`
+  (e.g. `https://api.example.com/mcp/access_as_user`). Omitting it can cause
+  `AADSTS9010010` for MCP clients that fall back to the IdP tenant's generic OIDC
+  scopes instead of this resource's own scope
 
 ### 3. Deploy
 

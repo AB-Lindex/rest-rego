@@ -45,6 +45,7 @@ type Fields struct {
 	PermissiveAuth       bool     `arg:"--permissive-auth,env:PERMISSIVE_AUTH" default:"false" help:"allow invalid tokens to be treated as anonymous (default: false, strict mode)"`
 	ResourceURL          string   `arg:"--resource-url,env:RESOURCE_URL" help:"externally-reachable URL of this protected resource (RFC 9728); required for JWT mode to serve metadata" placeholder:"URL"`
 	ResourceMetadataPath string   `arg:"--resource-metadata-path,env:RESOURCE_METADATA_PATH" default:"/.well-known/oauth-protected-resource" help:"path this instance listens on (and advertises) for RFC 9728 metadata; empty keeps the RFC default" placeholder:"PATH"`
+	ResourceScopes       []string `arg:"--resource-scopes,env:RESOURCE_SCOPES" help:"OAuth scope(s) this resource exposes, advertised as scopes_supported in RFC 9728 metadata (requires resource-url)" placeholder:"SCOPE"`
 	BasicAuthFile        string   `arg:"--basic-auth-file,env:BASIC_AUTH_FILE" help:"path to Apache 2.4 htpasswd file (bcrypt only)" placeholder:"FILE"`
 	NoAuth               bool     `arg:"--no-auth,env:NO_AUTH" default:"false" help:"disable authentication — policy is the sole access control (requires explicit opt-in)"`
 	ExposeBlockedHeaders bool     `arg:"--expose-blocked-headers,env:EXPOSE_BLOCKED_HEADERS" default:"false" help:"expose X-Restrego-* headers to policy as blocked_headers (security: headers still removed from backend)"`
@@ -127,6 +128,9 @@ func (f *Fields) validateMetricLabels() {
 func (f *Fields) validateResourceMetadataConfig() error {
 	if f.ResourceMetadataPath == "" {
 		f.ResourceMetadataPath = "/.well-known/oauth-protected-resource"
+	}
+	if f.ResourceURL == "" && len(f.ResourceScopes) > 0 {
+		slog.Warn("config: resource-scopes configured but resource-url is not set — ignored, RFC 9728 metadata endpoint disabled")
 	}
 	if f.ResourceURL == "" {
 		if len(f.WellKnownURL) > 0 {

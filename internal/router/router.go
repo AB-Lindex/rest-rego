@@ -91,7 +91,7 @@ func New(auth types.AuthProvider, validator types.Validator, cfg *config.Fields)
 			if err != nil {
 				slog.Error("router: failed to build resource-metadata URL", "error", err)
 			} else {
-				meta := newProtectedResourceMetadata(cfg.ResourceURL, issuers)
+				meta := newProtectedResourceMetadata(cfg.ResourceURL, issuers, cfg.ResourceScopes)
 				body, err := json.Marshal(meta)
 				if err != nil {
 					slog.Error("router: failed to marshal protected-resource metadata", "error", err)
@@ -100,7 +100,7 @@ func New(auth types.AuthProvider, validator types.Validator, cfg *config.Fields)
 					proxy.resourceMetadataURL = wellKnownURL
 
 					slog.Info("router: registered RFC 9728 protected-resource metadata endpoint",
-						"path", cfg.ResourceMetadataPath, "resource", cfg.ResourceURL, "authorization_servers", issuers)
+						"path", cfg.ResourceMetadataPath, "resource", cfg.ResourceURL, "authorization_servers", issuers, "scopes_supported", cfg.ResourceScopes)
 				}
 			}
 		}

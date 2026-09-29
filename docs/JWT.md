@@ -549,6 +549,32 @@ see below) then returns:
 every configured `WELLKNOWN_OIDC` document, so multiple comma-separated well-knowns
 produce multiple entries.
 
+### `scopes_supported` and MCP client token requests
+
+Set `RESOURCE_SCOPES` to advertise the resource's own app-specific scope(s) as
+`scopes_supported` in the metadata document:
+
+```bash
+export RESOURCE_SCOPES="https://api.example.com/mcp/access_as_user"
+```
+
+```json
+{
+  "resource": "https://api.example.com/mcp",
+  "authorization_servers": ["https://login.microsoftonline.com/tenant-id/v2.0"],
+  "bearer_methods_supported": ["header"],
+  "scopes_supported": ["https://api.example.com/mcp/access_as_user"]
+}
+```
+
+If `RESOURCE_SCOPES` is omitted, `scopes_supported` is left out of the document.
+MCP-aware clients (e.g. VS Code) then fall back to the connecting IdP tenant's
+generic OIDC `scopes_supported` (`openid profile email offline_access`) when
+requesting a token — which, combined with an explicit `resource` parameter, Entra ID
+rejects with `AADSTS9010010: The resource parameter provided in the request doesn't
+match with the requested scopes`. Setting `RESOURCE_SCOPES` resolves this by giving
+clients a scope value that matches the `resource` they're requesting a token for.
+
 ### 401 vs 403 on policy deny
 
 - A request with **no** `Authorization` header at all, denied by policy, now gets:

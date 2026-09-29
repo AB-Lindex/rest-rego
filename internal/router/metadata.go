@@ -12,15 +12,17 @@ type protectedResourceMetadata struct {
 	Resource               string   `json:"resource"`
 	AuthorizationServers   []string `json:"authorization_servers"`
 	BearerMethodsSupported []string `json:"bearer_methods_supported"`
+	ScopesSupported        []string `json:"scopes_supported,omitempty"`
 }
 
 // newProtectedResourceMetadata builds the RFC 9728 metadata document for the given
 // resource URL and de-duplicated issuer list.
-func newProtectedResourceMetadata(resourceURL string, issuers []string) *protectedResourceMetadata {
+func newProtectedResourceMetadata(resourceURL string, issuers []string, scopes []string) *protectedResourceMetadata {
 	return &protectedResourceMetadata{
 		Resource:               resourceURL,
 		AuthorizationServers:   issuers,
 		BearerMethodsSupported: []string{"header"},
+		ScopesSupported:        scopes,
 	}
 }
 

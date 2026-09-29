@@ -39,6 +39,8 @@ spec:
               value: api://your-api-audience
             - name: RESOURCE_URL
               value: https://api.example.com/mcp
+            - name: RESOURCE_SCOPES
+              value: https://api.example.com/mcp/access_as_user
           ports:
             - containerPort: 8181
               name: http

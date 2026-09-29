@@ -160,6 +160,22 @@ func TestValidateResourceMetadataConfig(t *testing.T) {
 			wantErr:  false,
 			wantPath: "/oauth/metadata",
 		},
+		{
+			name:     "resource-scopes set without resource-url warns, no error",
+			fields:   Fields{ResourceScopes: []string{"https://host/mcp/access_as_user"}},
+			wantErr:  false,
+			wantPath: "/.well-known/oauth-protected-resource",
+		},
+		{
+			name: "JWT mode with valid resource-url and resource-scopes",
+			fields: Fields{
+				WellKnownURL:   []string{"https://idp/.well-known/openid-configuration"},
+				ResourceURL:    "https://host/mcp",
+				ResourceScopes: []string{"https://host/mcp/access_as_user"},
+			},
+			wantErr:  false,
+			wantPath: "/.well-known/oauth-protected-resource",
+		},
 	}
 
 	for _, tt := range tests {

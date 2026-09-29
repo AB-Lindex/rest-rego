@@ -1,6 +1,34 @@
 package router
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func TestNewProtectedResourceMetadata_ScopesSupported(t *testing.T) {
+	t.Run("omitted when scopes are nil", func(t *testing.T) {
+		meta := newProtectedResourceMetadata("https://host/mcp", []string{"https://idp/issuer"}, nil)
+		body, err := json.Marshal(meta)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(string(body), "scopes_supported") {
+			t.Errorf("expected no scopes_supported key, got %s", body)
+		}
+	})
+
+	t.Run("present with correct values and order when set", func(t *testing.T) {
+		meta := newProtectedResourceMetadata("https://host/mcp", []string{"https://idp/issuer"}, []string{"a", "b"})
+		body, err := json.Marshal(meta)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(string(body), `"scopes_supported":["a","b"]`) {
+			t.Errorf("expected scopes_supported [a b], got %s", body)
+		}
+	})
+}
 
 func TestBuildWellKnownURL(t *testing.T) {
 	tests := []struct {

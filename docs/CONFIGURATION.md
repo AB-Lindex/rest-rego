@@ -121,6 +121,7 @@ rest-rego supports three mutually exclusive authentication modes:
 | `--permissive-auth` | `PERMISSIVE_AUTH` | `false` | Allow unauthenticated requests (treat as anonymous) |
 | `--resource-url` | `RESOURCE_URL` | - | Externally-reachable URL of this protected resource (RFC 9728). Required to enable the metadata endpoint |
 | `--resource-metadata-path` | `RESOURCE_METADATA_PATH` | `/.well-known/oauth-protected-resource` | Path this instance listens on (and advertises) for RFC 9728 metadata |
+| `--resource-scopes` | `RESOURCE_SCOPES` | - | OAuth scope(s) this resource exposes; advertised as `scopes_supported` in the RFC 9728 metadata document (requires `RESOURCE_URL`) |
 
 #### Standard OIDC (Azure AD, Okta, Auth0)
 
@@ -183,6 +184,7 @@ authorization server(s) instead of assuming rest-rego itself issues tokens.
 export WELLKNOWN_OIDC="https://login.microsoftonline.com/TENANT-ID/v2.0/.well-known/openid-configuration"
 export JWT_AUDIENCES="api://your-api-audience"
 export RESOURCE_URL="https://api.example.com/mcp"
+export RESOURCE_SCOPES="https://api.example.com/mcp/access_as_user"
 rest-rego
 ```
 
@@ -190,9 +192,17 @@ rest-rego
 {
   "resource": "https://api.example.com/mcp",
   "authorization_servers": ["https://login.microsoftonline.com/TENANT-ID/v2.0"],
-  "bearer_methods_supported": ["header"]
+  "bearer_methods_supported": ["header"],
+  "scopes_supported": ["https://api.example.com/mcp/access_as_user"]
 }
 ```
+
+`RESOURCE_SCOPES` is optional; when unset, `scopes_supported` is omitted from the
+document entirely. Without it, MCP-aware clients (e.g. VS Code) fall back to the
+connecting IdP's generic OIDC scopes when requesting a token, which — combined with
+an explicit `resource` parameter — Entra ID rejects with `AADSTS9010010`. Setting
+`RESOURCE_SCOPES` to the resource's own app-specific scope(s) gives clients a scope
+value that matches the `resource` they're requesting a token for.
 
 **Behavior**:
 

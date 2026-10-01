@@ -10,7 +10,7 @@ authorization server instead of assuming rest-rego itself issues tokens.
 | File               | Description                                                          |
 |--------------------|-----------------------------------------------------------------------|
 | `deployment.yaml`  | Deployment with rest-rego sidecar configured for JWT + `RESOURCE_URL` |
-| `ingress.yaml`      | Ingress routing both the resource path and the RFC 9728 well-known path |
+| `ingress.yaml`      | Two Ingress resources: one routing the resource path, one rewriting the RFC 9728 well-known path |
 | `request.rego`     | Rego policy requiring a validated JWT for `/mcp`                     |
 
 ## Prerequisites
@@ -75,15 +75,22 @@ curl -i https://api.example.com/mcp
 curl -H "Authorization: Bearer $TOKEN" https://api.example.com/mcp
 ```
 
-## Why two ingress paths?
+## Why two Ingress resources?
 
 rest-rego advertises the RFC 9728 well-known URL by inserting
 `RESOURCE_METADATA_PATH` **before** the path component of `RESOURCE_URL` (RFC 8414
 convention), e.g. `RESOURCE_URL=https://api.example.com/mcp` advertises
 `https://api.example.com/.well-known/oauth-protected-resource/mcp`. rest-rego itself
 only ever listens on the plain `/.well-known/oauth-protected-resource` path, so the
-ingress must rewrite the advertised path-suffixed URL back to the plain one — see
-`ingress.yaml`. If `RESOURCE_URL` has no path component, this rewrite is unnecessary.
+ingress must rewrite the advertised path-suffixed URL back to the plain one.
+
+`nginx.ingress.kubernetes.io/rewrite-target` applies to every path declared in the
+Ingress resource it's set on, not just the well-known path. Declaring both paths in
+a single Ingress would also rewrite requests to `/mcp`. `ingress.yaml` therefore
+defines two separate Ingress resources for the same host: one carrying the rewrite
+annotation for the well-known path only, the other routing `/mcp` unchanged with no
+rewrite annotation. If `RESOURCE_URL` has no path component, this rewrite — and the
+second Ingress — is unnecessary.
 
 ## See Also
 

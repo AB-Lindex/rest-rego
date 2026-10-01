@@ -1,6 +1,7 @@
 package router
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -48,7 +49,23 @@ func (proxy *Proxy) WrapHandler(next http.Handler) http.Handler {
 		now := time.Now()
 		w2 := newResponseTracker(w)
 
-		info := types.NewInfo(r, proxy.authKey, proxy.config.URLMetricsLevel)
+		info, err := types.NewInfo(r, proxy.authKey, proxy.config.URLMetricsLevel)
+		if err != nil {
+			if errors.Is(err, types.ErrAmbiguousAuthHeader) {
+				slog.Warn("router: rejecting request with duplicated auth header",
+					"path", r.URL.Path, "method", r.Method)
+				http.Error(w2, "ambiguous auth header", http.StatusBadRequest)
+			} else {
+				slog.Error("router: failed to build request info", "error", err)
+				http.Error(w2, "internal error", http.StatusInternalServerError)
+			}
+			slog.Info(fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+				"status", w2.status,
+				"duration", time.Since(now),
+				"size", w2.size,
+			)
+			return
+		}
 		r2 := info.RequestWithInfo(r)
 
 		next.ServeHTTP(w2, r2)

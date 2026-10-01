@@ -153,9 +153,43 @@ func TestValidateResourceMetadataConfig(t *testing.T) {
 			wantPath: "/.well-known/oauth-protected-resource",
 		},
 		{
+			name: "JWT mode with single-slash resource-url (no host) errors",
+			fields: Fields{
+				WellKnownURL: []string{"https://idp/.well-known/openid-configuration"},
+				ResourceURL:  "https:/mcp",
+			},
+			wantErr:  true,
+			wantPath: "/.well-known/oauth-protected-resource",
+		},
+		{
+			name: "JWT mode with triple-slash resource-url (empty host) errors",
+			fields: Fields{
+				WellKnownURL: []string{"https://idp/.well-known/openid-configuration"},
+				ResourceURL:  "https:///mcp",
+			},
+			wantErr:  true,
+			wantPath: "/.well-known/oauth-protected-resource",
+		},
+		{
 			name: "custom metadata path is preserved",
 			fields: Fields{
 				ResourceMetadataPath: "/oauth/metadata",
+			},
+			wantErr:  false,
+			wantPath: "/oauth/metadata",
+		},
+		{
+			name: "custom metadata path without leading slash is normalized",
+			fields: Fields{
+				ResourceMetadataPath: "oauth/metadata",
+			},
+			wantErr:  false,
+			wantPath: "/oauth/metadata",
+		},
+		{
+			name: "custom metadata path with trailing slash is normalized",
+			fields: Fields{
+				ResourceMetadataPath: "/oauth/metadata/",
 			},
 			wantErr:  false,
 			wantPath: "/oauth/metadata",

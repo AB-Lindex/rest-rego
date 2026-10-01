@@ -353,19 +353,26 @@ includes a path component, e.g. `RESOURCE_URL=https://api.example.com/mcp`, rest
 advertises the RFC 9728 well-known document at a **path-suffixed** URL —
 `https://api.example.com/.well-known/oauth-protected-resource/mcp` — while rest-rego
 itself only ever listens on the plain `RESOURCE_METADATA_PATH`
-(`/.well-known/oauth-protected-resource`). Your ingress must route **two** distinct
-paths to the same backend, rewriting the well-known path back to the plain one:
+(`/.well-known/oauth-protected-resource`). Use **two** separate Ingress resources
+for the same host:
 
-1. The original resource path (`/mcp`) — routed unchanged
-2. The path-suffixed well-known path
-   (`/.well-known/oauth-protected-resource/mcp`) — rewritten to
-   `/.well-known/oauth-protected-resource` before reaching rest-rego
+1. One for the path-suffixed well-known path
+   (`/.well-known/oauth-protected-resource/mcp`), carrying
+   `nginx.ingress.kubernetes.io/rewrite-target: /.well-known/oauth-protected-resource`
+   to rewrite it to the plain path before it reaches rest-rego
+2. One for the original resource path (`/mcp`), with no rewrite annotation, so it
+   reaches rest-rego unchanged
+
+They must be separate resources because `nginx.ingress.kubernetes.io/rewrite-target`
+applies to every path declared in the Ingress resource it's set on — putting both
+paths in one Ingress would rewrite `/mcp` as well.
 
 ```yaml
+# Well-known document: rewritten to the plain RESOURCE_METADATA_PATH
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: my-app
+  name: my-app-wellknown
   namespace: production
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -389,6 +396,26 @@ spec:
             name: my-app
             port:
               number: 80
+---
+# Protected resource and everything else: no rewrite annotation
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: my-app
+  namespace: production
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - api.example.com
+    secretName: my-app-tls
+  rules:
+  - host: api.example.com
+    http:
+      paths:
       # The actual protected resource path — routed unchanged, no rewrite
       - path: /mcp
         pathType: Prefix
@@ -401,7 +428,7 @@ spec:
 
 **Note**: if `RESOURCE_URL` has no path (e.g. `RESOURCE_URL=https://api.example.com`),
 no rewrite is needed — the well-known document is served at the plain
-`RESOURCE_METADATA_PATH` directly. See
+`RESOURCE_METADATA_PATH` directly, and a single Ingress resource is sufficient. See
 [examples/kubernetes/mcp-auth/](../examples/kubernetes/mcp-auth/) for a complete
 worked example.
 

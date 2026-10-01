@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"strings"
 )
@@ -11,6 +12,10 @@ type ctxKey int
 
 const ctxInfoKey ctxKey = 0
 const CtxBlockedHeadersKey ctxKey = 1
+
+// ErrAmbiguousAuthHeader is returned by NewInfo when the configured auth
+// header is present more than once in the request.
+var ErrAmbiguousAuthHeader = errors.New("ambiguous auth header: configured auth header present multiple times")
 
 // Info is the request information
 type Info struct {
@@ -70,8 +75,10 @@ func TruncateURLForMetrics(path string, segments []string, level int) string {
 	return "/" + strings.Join(segments[:min(level, len(segments))], "/")
 }
 
-// NewInfo creates a new instance of the Info based on the request
-func NewInfo(r *http.Request, authKey string, urlMetricsLevel int) *Info {
+// NewInfo creates a new instance of the Info based on the request. It returns
+// ErrAmbiguousAuthHeader if the configured auth header (authKey) was sent more
+// than once, rather than panicking.
+func NewInfo(r *http.Request, authKey string, urlMetricsLevel int) (*Info, error) {
 	i := new(Info)
 	i.Request.Method = r.Method
 	i.Request.Path = strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
@@ -88,8 +95,12 @@ func NewInfo(r *http.Request, authKey string, urlMetricsLevel int) *Info {
 	}
 
 	if authHdr, ok := i.Request.Headers[authKey]; ok {
+		authValue, ok := authHdr.(string)
+		if !ok {
+			return nil, ErrAmbiguousAuthHeader
+		}
 		a := &RequestAuth{}
-		parts := strings.SplitN(authHdr.(string), " ", 2)
+		parts := strings.SplitN(authValue, " ", 2)
 		if len(parts) == 2 {
 			a.Kind = strings.ToLower(parts[0])
 			a.Token = strings.TrimSpace(parts[1])
@@ -115,7 +126,7 @@ func NewInfo(r *http.Request, authKey string, urlMetricsLevel int) *Info {
 		i.Request.BlockedHeaders = blocked
 	}
 
-	return i
+	return i, nil
 }
 
 // RequestWithInfo adds the Info to the request context

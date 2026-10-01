@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -274,7 +275,10 @@ func TestNewInfo(t *testing.T) {
 			req.ContentLength = tc.contentLength
 
 			// Call NewInfo
-			info := NewInfo(req, tc.authKey, -1)
+			info, err := NewInfo(req, tc.authKey, -1)
+			if err != nil {
+				t.Fatalf("NewInfo returned unexpected error: %v", err)
+			}
 
 			// Verify method
 			if info.Request.Method != tc.expectedMethod {
@@ -508,6 +512,9 @@ func TestGetInfo(t *testing.T) {
 			if !reflect.DeepEqual(info.Request.Path, tc.expected.Request.Path) {
 				t.Errorf("Path: expected %v, got %v", tc.expected.Request.Path, info.Request.Path)
 			}
+			if !reflect.DeepEqual(info.Request.Auth, tc.expected.Request.Auth) {
+				t.Errorf("Auth: expected %+v, got %+v", tc.expected.Request.Auth, info.Request.Auth)
+			}
 		})
 	}
 }
@@ -695,7 +702,10 @@ func TestNewInfo_URLMetricsLevel(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", tc.path, nil)
-			info := NewInfo(req, "Authorization", tc.level)
+			info, err := NewInfo(req, "Authorization", tc.level)
+			if err != nil {
+				t.Fatalf("NewInfo returned unexpected error: %v", err)
+			}
 			if info.URL != tc.expectedURL {
 				t.Errorf("NewInfo URL: got %q, want %q", info.URL, tc.expectedURL)
 			}
@@ -708,7 +718,10 @@ func TestNewInfo_EdgeCases(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("Authorization", "Basic not-valid-base64!!!")
 
-		info := NewInfo(req, "Authorization", -1)
+		info, err := NewInfo(req, "Authorization", -1)
+		if err != nil {
+			t.Fatalf("NewInfo returned unexpected error: %v", err)
+		}
 
 		if info.Request.Auth == nil {
 			t.Fatal("Expected auth to be set")
@@ -727,7 +740,10 @@ func TestNewInfo_EdgeCases(t *testing.T) {
 
 	t.Run("Path with query parameters", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/api/users?id=123&sort=name", nil)
-		info := NewInfo(req, "Authorization", -1)
+		info, err := NewInfo(req, "Authorization", -1)
+		if err != nil {
+			t.Fatalf("NewInfo returned unexpected error: %v", err)
+		}
 
 		// URL must not include query parameters - it's used as a Prometheus metric label
 		// and including query params would cause unbounded high cardinality.
@@ -744,10 +760,27 @@ func TestNewInfo_EdgeCases(t *testing.T) {
 
 	t.Run("Empty headers map is initialized", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
-		info := NewInfo(req, "Authorization", -1)
+		info, err := NewInfo(req, "Authorization", -1)
+		if err != nil {
+			t.Fatalf("NewInfo returned unexpected error: %v", err)
+		}
 
 		if info.Request.Headers == nil {
 			t.Error("Expected Headers map to be initialized, got nil")
+		}
+	})
+
+	t.Run("Duplicate auth header returns ErrAmbiguousAuthHeader instead of panicking", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/protected", nil)
+		req.Header.Add("Authorization", "Bearer token-1")
+		req.Header.Add("Authorization", "Bearer token-2")
+
+		info, err := NewInfo(req, "Authorization", -1)
+		if !errors.Is(err, ErrAmbiguousAuthHeader) {
+			t.Fatalf("expected ErrAmbiguousAuthHeader, got %v", err)
+		}
+		if info != nil {
+			t.Errorf("expected nil info on error, got %+v", info)
 		}
 	})
 }
@@ -821,7 +854,10 @@ func TestNewInfo_BlockedHeaders(t *testing.T) {
 			req = tc.setupContext(req)
 
 			// Call NewInfo
-			info := NewInfo(req, "Authorization", -1)
+			info, err := NewInfo(req, "Authorization", -1)
+			if err != nil {
+				t.Fatalf("NewInfo returned unexpected error: %v", err)
+			}
 
 			// Verify blocked headers
 			if tc.expectNil {
@@ -851,7 +887,10 @@ func TestRequestInfo_JSONMarshal_BlockedHeaders(t *testing.T) {
 		}
 		req = req.WithContext(context.WithValue(ctx, CtxBlockedHeadersKey, blocked))
 
-		info := NewInfo(req, "Authorization", -1)
+		info, err := NewInfo(req, "Authorization", -1)
+		if err != nil {
+			t.Fatalf("NewInfo returned unexpected error: %v", err)
+		}
 
 		// Marshal to JSON
 		data, err := json.Marshal(info.Request)
@@ -876,7 +915,10 @@ func TestRequestInfo_JSONMarshal_BlockedHeaders(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		// Don't add anything to context
 
-		info := NewInfo(req, "Authorization", -1)
+		info, err := NewInfo(req, "Authorization", -1)
+		if err != nil {
+			t.Fatalf("NewInfo returned unexpected error: %v", err)
+		}
 
 		// Marshal to JSON
 		data, err := json.Marshal(info.Request)
@@ -901,7 +943,10 @@ func TestRequestInfo_JSONMarshal_BlockedHeaders(t *testing.T) {
 		}
 		req = req.WithContext(context.WithValue(ctx, CtxBlockedHeadersKey, blocked))
 
-		info := NewInfo(req, "Authorization", -1)
+		info, err := NewInfo(req, "Authorization", -1)
+		if err != nil {
+			t.Fatalf("NewInfo returned unexpected error: %v", err)
+		}
 
 		// Marshal to JSON
 		data, err := json.Marshal(info.Request)

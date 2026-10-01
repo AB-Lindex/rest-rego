@@ -230,3 +230,27 @@ func TestWrapHandler(t *testing.T) {
 		})
 	}
 }
+
+func TestWrapHandler_DuplicateAuthHeaderRejectedWithoutPanic(t *testing.T) {
+	proxy := &Proxy{
+		authKey: test_auth_key,
+		config:  &config.Fields{},
+	}
+
+	mockHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("next handler should not be invoked for an ambiguous auth header")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", strings.NewReader(""))
+	req.Header.Add(test_auth_key, "Bearer token-1")
+	req.Header.Add(test_auth_key, "Bearer token-2")
+
+	rr := httptest.NewRecorder()
+
+	wrappedHandler := proxy.WrapHandler(mockHandler)
+	wrappedHandler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}

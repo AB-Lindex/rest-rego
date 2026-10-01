@@ -405,7 +405,7 @@ func TestLoadJWKS_NonExistentFile(t *testing.T) {
 	}
 }
 
-// TestLoadJWKS_MultipleFileAndHTTP tests mixed file and HTTP sources
+// TestLoadJWKS_MultipleFiles tests loading JWKS from multiple file-based sources
 func TestLoadJWKS_MultipleFiles(t *testing.T) {
 	// Create a temporary directory for test files
 	tmpDir := t.TempDir()
@@ -1421,12 +1421,13 @@ func TestAuthenticate_HTTPKeySet_SingleKey_BypassesKidMismatch(t *testing.T) {
 // the single-key bypass does NOT extend to HTTP-cached JWKS with two or more keys —
 // kid matching must still be enforced in that case.
 func TestAuthenticate_HTTPKeySet_MultipleKeys_KidMismatchStillRejected(t *testing.T) {
-	// JWKS publishes two keys; the token's kid matches neither.
+	// JWKS publishes two keys. The signing key shares its underlying material
+	// with jwks-key-2 (so the signature itself is valid) but carries an
+	// unpublished kid, proving that kid matching—not just signature
+	// verification—is what rejects the token for multi-key sets.
 	jwksPublicKey1, _ := newRSAJWK(t, "jwks-key-1")
-	jwksPublicKey2, _ := newRSAJWK(t, "jwks-key-2")
+	jwksPublicKey2, signingPrivateKey := newRSAJWKPair(t, "jwks-key-2", "jwks-key-3")
 	_, wellKnownServer := newHTTPJWKSFixture(t, jwksPublicKey1, jwksPublicKey2)
-
-	_, signingPrivateKey := newRSAJWK(t, "jwks-key-3")
 
 	j := New([]string{wellKnownServer.URL}, "aud", []string{"test-audience"}, "bearer", false)
 

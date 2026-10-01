@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/AB-Lindex/rest-rego/internal/types"
@@ -128,6 +129,9 @@ func (f *Fields) validateMetricLabels() {
 func (f *Fields) validateResourceMetadataConfig() error {
 	if f.ResourceMetadataPath == "" {
 		f.ResourceMetadataPath = "/.well-known/oauth-protected-resource"
+	} else {
+		// normalize to a leading slash and no trailing slash so it matches r.URL.Path
+		f.ResourceMetadataPath = "/" + strings.Trim(f.ResourceMetadataPath, "/")
 	}
 	if f.ResourceURL == "" && len(f.ResourceScopes) > 0 {
 		slog.Warn("config: resource-scopes configured but resource-url is not set — ignored, RFC 9728 metadata endpoint disabled")
@@ -143,8 +147,8 @@ func (f *Fields) validateResourceMetadataConfig() error {
 		return nil
 	}
 	u, err := url.Parse(f.ResourceURL)
-	if err != nil || !u.IsAbs() || (u.Scheme != "http" && u.Scheme != "https") {
-		return fmt.Errorf("resource-url must be an absolute http(s) URL, got %q", f.ResourceURL)
+	if err != nil || !u.IsAbs() || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("resource-url must be an absolute http(s) URL with a host, got %q", f.ResourceURL)
 	}
 	return nil
 }

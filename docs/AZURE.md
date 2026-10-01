@@ -70,6 +70,8 @@ sequenceDiagram
 
 Set `PERMISSIVE_AUTH=true` to allow requests with missing or unrecognized tokens to pass through as anonymous rather than returning `401 Unauthorized`. The policy receives `null` for `input.user` and can decide whether to allow or deny the request.
 
+> ⚠️ **Warning**: `input.user` is only populated after rest-rego verifies the token's `appid`/`tid` claims against Microsoft Graph — never assume a request is authenticated just because a bearer token was present. Always check `input.user` for `null` explicitly in your policy rather than re-parsing the raw token yourself and assuming it's valid. See [Detecting Anonymous Requests in the Backend](PERMISSIVE.md#detecting-anonymous-requests-in-the-backend) for how to signal this to the backend.
+
 See [PERMISSIVE.md](PERMISSIVE.md) for complete documentation, including how to detect anonymous requests in the backend service.
 
 ## Input fields for policies

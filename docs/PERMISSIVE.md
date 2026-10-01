@@ -26,6 +26,8 @@ Request → Auth → [401 if invalid]         Request → Auth → Policy → Ba
 
 **The policy is always the final gatekeeper.** Permissive mode only changes what happens before the policy runs — it does not bypass the policy.
 
+> ⚠️ **It is your responsibility to check, not assume.** rest-rego never tells your policy or backend "trust this caller" — it only tells you whether verification succeeded or the request was treated as anonymous. Always check `input.request.auth` / `input.jwt` / `input.user` for `null` in your policy, and signal the result to the backend explicitly (see [Detecting Anonymous Requests in the Backend](#detecting-anonymous-requests-in-the-backend)) before treating a request as authenticated. Do not parse the raw JWT yourself and assume it's valid just because it looks like one — only rest-rego's own verification result is authoritative.
+
 ## Configuration
 
 ```bash
@@ -91,6 +93,8 @@ Rego policy results are forwarded to the backend as `X-Restrego-*` headers. Any 
 |---|---|
 | `is_anonymous := true` | `X-Restrego-Is-Anonymous: true` |
 | `caller := "alice"` | `X-Restrego-Caller: alice` |
+
+> ⚠️ **Don't infer trust from header presence.** A populated `X-Restrego-Caller` (or similar) header does not by itself prove the request was verified. Always check the explicit `X-Restrego-Is-Anonymous` flag (or your own policy-defined anonymity signal) rather than assuming a non-empty value means the caller was authenticated.
 
 Use this to signal the authentication state to the backend service:
 

@@ -122,7 +122,7 @@ allow if {
 
 ## Mutual Exclusion
 
-`PERMISSIVE_AUTH=true` combined with `NO_AUTH=true` also causes a startup error — permissive mode has no meaning when there is no token to validate.
+`PERMISSIVE_AUTH=true` combined with `NO_AUTH=true` also causes a startup error — permissive mode has no meaning when there is no token to validate. See [Detecting Anonymous Requests in the Backend](PERMISSIVE.md#detecting-anonymous-requests-in-the-backend) for why policies must check rest-rego's verification result rather than assuming a token's presence means it was verified.
 
 ## Security Trade-offs and Compensating Controls
 

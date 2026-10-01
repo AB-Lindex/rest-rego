@@ -200,6 +200,8 @@ rest-rego
 
 **Wrong passwords always return `401 Unauthorized` regardless of permissive mode.** This prevents credential-stuffing attacks from silently downgrading to anonymous access.
 
+> ⚠️ **Warning**: `input.request.auth.user` is only populated when rest-rego has verified the credentials — never assume a request is authenticated just because an `Authorization` header was present. Always check `input.request.auth` for `null` explicitly in your policy or backend; do not inspect the raw header yourself and assume it's valid. See [Detecting Anonymous Requests in the Backend](PERMISSIVE.md#detecting-anonymous-requests-in-the-backend) for how to signal this to the backend.
+
 See [PERMISSIVE.md](PERMISSIVE.md) for complete documentation, including how to detect anonymous requests in the backend service.
 
 ## Hot-Reload

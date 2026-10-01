@@ -16,6 +16,8 @@ JWT verification requires:
 
 **Permissive mode**: Set `PERMISSIVE_AUTH=true` to allow requests with missing or invalid tokens to pass through as anonymous. See [PERMISSIVE.md](PERMISSIVE.md) for details.
 
+> ⚠️ **Warning**: `input.jwt` is only set after rest-rego verifies the token's signature, issuer, and audience — never assume a request is authenticated just because an `Authorization` header or JWT-shaped token was present. Always check `input.jwt` for absence/`null` explicitly in your policy rather than parsing the raw token yourself and assuming it's valid. See [Detecting Anonymous Requests in the Backend](PERMISSIVE.md#detecting-anonymous-requests-in-the-backend) for how to signal this to the backend.
+
 ## Standard OIDC Configuration
 
 For standard OIDC providers (like Azure), rest-rego automatically:

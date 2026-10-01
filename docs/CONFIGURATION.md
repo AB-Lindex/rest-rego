@@ -278,7 +278,7 @@ export PERMISSIVE_AUTH=true
 rest-rego
 ```
 
-**Warning**: In permissive mode, unauthenticated requests are passed to policies with empty auth context. Your policies must handle this explicitly.
+**Warning**: In permissive mode, unauthenticated requests are passed to policies with empty auth context. Your policies must handle this explicitly — check `input.request.auth` / `input.jwt` / `input.user` for `null` to confirm rest-rego actually verified the caller, rather than assuming a token's presence means it was. See [Detecting Anonymous Requests in the Backend](PERMISSIVE.md#detecting-anonymous-requests-in-the-backend) for how to signal this to the backend.
 
 See [PERMISSIVE.md](PERMISSIVE.md) for complete documentation, including behavior per auth provider and how to detect anonymous requests in the backend service.
 

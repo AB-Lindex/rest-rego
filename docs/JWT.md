@@ -24,7 +24,7 @@ For standard OIDC providers (like Azure), rest-rego automatically:
 1. Fetches the OIDC discovery document from the well-known URL
 2. Downloads the JSON Web Key Set (JWKS) for signature verification
 3. Validates JWT tokens on each request
-4. Refreshes JWKS every 24 hours
+4. Refreshes JWKS automatically according to the provider's cache headers
 
 ### Basic Configuration
 
@@ -85,7 +85,7 @@ sequenceDiagram
   participant b as Backend to<br>protect
   participant idp as Identity Provider<br>(Azure/WSO2/etc.)
 
-  note over p,idp: Startup (with auto-refresh every 24h)
+  note over p,idp: Startup (with automatic JWKS refresh)
   p->>idp: Fetch OIDC config
   idp->>p: WellKnown-config
   p->>idp: Fetch JWKS
@@ -109,8 +109,22 @@ rest-rego automatically manages OIDC configuration and cryptographic keys:
 
 ### Automatic Key Refresh
 - JWKS (JSON Web Key Set) is fetched from the URL in the OIDC discovery document
-- Keys are automatically refreshed every 24 hours
+- Refresh checks run every two minutes. Fetch intervals follow `Cache-Control`/`Expires`, with a minimum of 15 minutes (also the default without cache headers)
 - Changes are detected and applied without restart
+- Both the fetched JWKS and the keyset after algorithm enrichment must contain at least one key; empty sets are rejected before caching
+- Failed refreshes retain the last successfully cached keys and are retried on the normal refresh schedule
+- An empty JWKS at startup is rejected rather than accepted as a usable keyset
+- File-based JWKS uses the same non-empty checks but is loaded only at startup
+
+### JWKS Refresh Logging
+
+JWKS fetches and background refresh failures are logged without enabling debug logging:
+
+- **INFO** `jwtsupport: JWKS fetched and validated` includes `url` and `keys` after a successful fetch, parse, and non-empty validation (at startup and on every successful refresh)
+- **ERROR** `jwtsupport: JWKS refresh failed; keeping cached keys` includes the refresh error and endpoint URL in `error`, including network failures, non-200 responses, malformed JSON, and rejected empty keysets
+- Startup failures use the existing `failed to get jwks` or `failed to post-process jwks` error messages
+
+These logs do not include JWTs or key material.
 
 ### Algorithm Detection
 - rest-rego uses the algorithm (`alg`) specified in each key

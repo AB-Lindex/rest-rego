@@ -3,6 +3,7 @@ package jwtsupport
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -48,6 +49,12 @@ type wellKnownData struct {
 	isLocalFile         bool     // true if loaded from file: URL, false if from HTTP(S)
 }
 
+type jwksRefreshErrorSink struct{}
+
+func (jwksRefreshErrorSink) Error(err error) {
+	slog.Error("jwtsupport: JWKS refresh failed; keeping cached keys", "error", err)
+}
+
 // PostFetch is a function that is called after the JWKS is fetched from the
 // remote server. This is needed for those providers that do not include the
 // algorithm in the JWKS, but instead provide a list of supported algorithms
@@ -56,6 +63,10 @@ type wellKnownData struct {
 // This function will add the supported algorithms to the keys that do not
 // have an algorithm set.
 func (wkd *wellKnownData) PostFetch(url string, set jwk.Set) (jwk.Set, error) {
+	if set.Len() == 0 {
+		return nil, fmt.Errorf("JWKS at %q contains no keys", url)
+	}
+
 	newset := jwk.NewSet()
 	// fmt.Println("--postfetch--start--", url)
 	for i := range set.Len() {
@@ -75,8 +86,11 @@ func (wkd *wellKnownData) PostFetch(url string, set jwk.Set) (jwk.Set, error) {
 			}
 		}
 	}
-	// fmt.Println("--postfetch--end--")
-	// fmt.Println()
+	if newset.Len() == 0 {
+		return nil, fmt.Errorf("JWKS at %q contains no keys after algorithm enrichment", url)
+	}
+
+	slog.Info("jwtsupport: JWKS fetched and validated", "url", url, "keys", newset.Len())
 	return newset, nil
 }
 
@@ -219,6 +233,7 @@ func (j *JWTSupport) LoadJWKS() {
 
 	j.cache = jwk.NewCache(context.Background(),
 		jwk.WithRefreshWindow(2*time.Minute),
+		jwk.WithErrSink(jwksRefreshErrorSink{}),
 		// jwk.WithRefreshWindow(24*time.Hour),
 	)
 

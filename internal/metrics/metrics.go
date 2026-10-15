@@ -32,6 +32,23 @@ var metrics struct {
 	def          string
 }
 
+// sanitizeMethods lists the HTTP methods that are considered valid and should be used as-is.
+// sorted in a likely order of usage.
+var sanitizeMethods = []string{
+	http.MethodGet,
+	http.MethodPost,
+	http.MethodOptions,
+	http.MethodHead,
+	http.MethodDelete,
+	http.MethodConnect,
+	http.MethodPatch,
+	http.MethodTrace,
+	"PUT",
+	"QUERY",
+}
+
+const unknownMethod = "unknown"
+
 // New creates a new instance of the metrics. customLabels are additional Prometheus
 // label names populated per-request from policy "labels" results; maxLen and def
 // control sanitisation of their values (see sanitizeLabelValue).
@@ -129,7 +146,7 @@ func Wrap(next http.Handler) http.Handler {
 
 		info := types.GetInfo(r)
 
-		labels := append(make([]string, 0, 3+len(metrics.customLabels)), r.Method, strconv.Itoa(w2.Status()), info.URL)
+		labels := append(make([]string, 0, 3+len(metrics.customLabels)), sanitizeMethod(r.Method), strconv.Itoa(w2.Status()), info.URL)
 		for _, name := range metrics.customLabels {
 			labels = append(labels, sanitizeLabelValue(info.Labels[name], metrics.maxLen, metrics.def))
 		}
@@ -139,6 +156,17 @@ func Wrap(next http.Handler) http.Handler {
 		metrics.responseSize.WithLabelValues(labels...).Observe(float64(w2.Size()))
 		metrics.requestsTotal.WithLabelValues(labels...).Inc()
 	})
+}
+
+// sanitizeMethod maps the request method to a fixed set so clients cannot create
+// unbounded label cardinality with arbitrary method tokens.
+func sanitizeMethod(m string) string {
+	for _, valid := range sanitizeMethods {
+		if m == valid {
+			return m
+		}
+	}
+	return unknownMethod
 }
 
 // sanitizeLabelValue coerces a policy-provided value into a value safe to use as a

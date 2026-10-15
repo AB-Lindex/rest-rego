@@ -37,6 +37,19 @@ func TestSanitizeLabelValue(t *testing.T) {
 	}
 }
 
+func TestSanitizeMethod(t *testing.T) {
+	for _, m := range []string{"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "CONNECT", "OPTIONS", "TRACE"} {
+		if got := sanitizeMethod(m); got != m {
+			t.Errorf("sanitizeMethod(%q) = %q, want %q", m, got, m)
+		}
+	}
+	for _, m := range []string{"", "get", "FOO", "PROPFIND", "X\x00Y", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"} {
+		if got := sanitizeMethod(m); got != "unknown" {
+			t.Errorf("sanitizeMethod(%q) = %q, want unknown", m, got)
+		}
+	}
+}
+
 // testStatusWriter is a minimal StatusWriter implementation for tests.
 type testStatusWriter struct {
 	http.ResponseWriter

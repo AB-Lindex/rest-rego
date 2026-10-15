@@ -29,31 +29,32 @@ func (proxy *Proxy) policyHandler(next http.Handler) http.Handler {
 			return // EXPLICIT FAIL CLOSED
 		}
 
-		// Validate result structure
-		resultMap, ok := result.(map[string]interface{})
-		if !ok {
-			slog.Error("router: invalid policy result type",
-				"type", fmt.Sprintf("%T", result),
-				"path", r.URL.Path)
-			http.Error(w, "invalid policy result", http.StatusInternalServerError)
-			return
+		// An undefined result (nil) is treated as deny, like an undefined 'allow' rule
+		var resultMap map[string]interface{}
+		if result != nil {
+			var ok bool
+			resultMap, ok = result.(map[string]interface{})
+			if !ok {
+				slog.Error("router: invalid policy result type",
+					"type", fmt.Sprintf("%T", result),
+					"path", r.URL.Path)
+				http.Error(w, "invalid policy result", http.StatusInternalServerError)
+				return
+			}
 		}
 
-		// Validate that 'allow' field exists and is boolean - PREVENTS FAIL-OPEN
-		allowValue, allowExists := resultMap["allow"]
-		if !allowExists {
-			slog.Error("router: policy result missing 'allow' field", "path", r.URL.Path)
-			http.Error(w, "invalid policy result", http.StatusInternalServerError)
-			return
-		}
-
-		allowBool, isBool := allowValue.(bool)
-		if !isBool {
+		// Undefined 'allow' means deny; a defined non-boolean is a policy error - PREVENTS FAIL-OPEN
+		allowBool := false
+		if allowValue, allowExists := resultMap["allow"]; !allowExists {
+			slog.Warn("router: policy 'allow' is undefined - denying", "path", r.URL.Path)
+		} else if b, isBool := allowValue.(bool); !isBool {
 			slog.Error("router: policy 'allow' field is not boolean",
 				"type", fmt.Sprintf("%T", allowValue),
 				"path", r.URL.Path)
 			http.Error(w, "invalid policy result", http.StatusInternalServerError)
 			return
+		} else {
+			allowBool = b
 		}
 
 		info.Result = result

@@ -136,6 +136,9 @@ func (r *RegoCache) Validate(name string, input interface{}) (interface{}, error
 		slog.Error("rego: get-rego error", "error", err)
 		return nil, err
 	}
+	if query == nil {
+		return nil, fmt.Errorf("policy not found: %s", name)
+	}
 
 	rs, err := query.Eval(context.Background(), rego.EvalInput(input), rego.EvalPrintHook(r), rego.EvalInstrument(false))
 	if err != nil {

@@ -175,6 +175,37 @@ default allow := true
 	}
 }
 
+func TestValidate_undefinedAllowOmitted(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	const policyFile = "request.rego"
+	writePolicy(t, tmpDir, policyFile, `package testpkg
+
+allow if input.token == "secret"
+`)
+	rc := newTestCache(t, tmpDir, policyFile)
+
+	result, err := rc.Validate(policyFile, map[string]any{"token": "wrong"})
+	if err != nil {
+		t.Fatalf("Validate() error: %v", err)
+	}
+	if m, ok := result.(map[string]any); ok {
+		if _, found := m["allow"]; found {
+			t.Errorf("expected allow to be undefined, got %v", m["allow"])
+		}
+	}
+}
+
+func TestValidate_missingPolicyReturnsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	rc := newTestCache(t, tmpDir, "request.rego")
+
+	result, err := rc.Validate("request.rego", map[string]any{})
+	if err == nil {
+		t.Fatalf("expected error for missing policy, got result %v", result)
+	}
+}
+
 // BenchmarkValidate measures per-evaluation allocations in the OPA policy path.
 //
 // Investigation: OPA's PreparedEvalQuery.Eval is suspected to accumulate internal

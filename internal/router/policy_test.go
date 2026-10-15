@@ -127,6 +127,45 @@ func newDenyPathTestRequest(t *testing.T, proxy *Proxy, auth *types.RequestAuth)
 	return rr
 }
 
+func TestPolicyHandler_AllowValidation(t *testing.T) {
+	tests := []struct {
+		name     string
+		result   interface{}
+		want     int
+		wantNext bool
+	}{
+		{"allow=true proceeds", map[string]interface{}{"allow": true}, http.StatusOK, true},
+		{"allow=false is denied", map[string]interface{}{"allow": false}, http.StatusForbidden, false},
+		{"nil result (undefined) is denied", nil, http.StatusForbidden, false},
+		{"missing allow is denied", map[string]interface{}{"url": "/x"}, http.StatusForbidden, false},
+		{"empty map is denied", map[string]interface{}{}, http.StatusForbidden, false},
+		{"string allow is a policy error", map[string]interface{}{"allow": "true"}, http.StatusInternalServerError, false},
+		{"number allow is a policy error", map[string]interface{}{"allow": 1}, http.StatusInternalServerError, false},
+		{"null allow is a policy error", map[string]interface{}{"allow": nil}, http.StatusInternalServerError, false},
+		{"non-map result is a policy error", "allow", http.StatusInternalServerError, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proxy := &Proxy{requestName: "request.rego", validator: &policyMockValidator{result: tt.result}}
+			req := (&types.Info{}).RequestWithInfo(httptest.NewRequest(http.MethodGet, "/test", nil))
+
+			nextCalled := false
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { nextCalled = true })
+
+			rr := httptest.NewRecorder()
+			proxy.policyHandler(next).ServeHTTP(rr, req)
+
+			if nextCalled != tt.wantNext {
+				t.Errorf("next handler called = %v, want %v", nextCalled, tt.wantNext)
+			}
+			if rr.Code != tt.want {
+				t.Errorf("expected %d, got %d", tt.want, rr.Code)
+			}
+		})
+	}
+}
+
 func TestPolicyHandler_DenyPathStatusCodeSplit(t *testing.T) {
 	t.Run("JWT mode + resource-url, no Authorization header -> 401 with resource_metadata challenge", func(t *testing.T) {
 		proxy := &Proxy{

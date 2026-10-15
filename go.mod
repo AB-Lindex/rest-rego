@@ -1,6 +1,6 @@
 module github.com/AB-Lindex/rest-rego
 
-go 1.27.0
+go 1.27.2
 
 require (
 	github.com/AB-Lindex/go-resthelp v0.3.0

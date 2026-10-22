@@ -25,7 +25,7 @@ func fileURLToPath(fileURL string) (string, error) {
 
 	// Extract the path from the URL
 	// For file:///path, parsed.Path = /path
-	// For file://localhost/path, parsed.Path = /path  
+	// For file://localhost/path, parsed.Path = /path
 	// For file:/path, parsed.Path = /path
 	// For file:config/test.json, parsed.Opaque = config/test.json (opaque part, no Path)
 	path := parsed.Path

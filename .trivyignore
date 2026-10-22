@@ -41,3 +41,7 @@ KSV041
 KSV043
 KSV104
 KSV106
+
+# GO-2026-5932: golang.org/x/crypto/openpgp is unmaintained, no fix available.
+# Not imported by rest-rego and not called per govulncheck (accepted 2026-10-22).
+GO-2026-5932
